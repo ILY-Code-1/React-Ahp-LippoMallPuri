@@ -123,9 +123,11 @@ const DetailReportPage = () => {
         <div style={S.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
             <div style={S.logoBox}>
-              <span style={{ fontWeight: 800 }}>LIPPO</span>
-              <span style={{ fontWeight: 300 }}>MALL</span>
-              <span style={S.logoSub}>PURI</span>
+              <div style={S.logoBrand}>
+                <span style={{ fontWeight: 900 }}>LIPPO</span>
+                <span style={{ fontWeight: 300 }}>MALL</span>
+              </div>
+              <div style={S.logoSub}>PURI</div>
             </div>
             <div>
               <div style={{ fontSize: 26, fontWeight: 700, color: '#18181b', lineHeight: 1.1 }}>
@@ -452,15 +454,17 @@ const S = {
   logoBox: {
     background: '#18181b',
     color: '#ffffff',
-    padding: '14px 18px',
+    padding: '16px 20px',
     borderRadius: 4,
-    fontSize: 22,
     display: 'flex',
-    alignItems: 'baseline',
-    gap: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    lineHeight: 1,
+    userSelect: 'none',
     position: 'relative',
   },
-  logoSub: { fontSize: 8, letterSpacing: 4, marginLeft: 4, fontWeight: 400 },
+  logoBrand: { fontSize: 28, letterSpacing: '-0.02em', display: 'flex', alignItems: 'baseline' },
+  logoSub: { fontSize: 11, letterSpacing: '0.5em', fontWeight: 300, color: 'rgba(255,255,255,0.6)', marginTop: 6, paddingLeft: 8 },
   rule: { height: 1, background: '#e4e4e7', marginTop: 28 },
   cardRule: { height: 1, background: '#e4e4e7', margin: '14px 0' },
   btnDanger: {
