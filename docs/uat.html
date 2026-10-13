@@ -104,9 +104,9 @@
         <td>Admin menjalankan analisis prioritas optimasi energi</td>
         <td class="role">Admin</td>
         <td>Jalankan Analisis AHP</td>
-        <td>Membuka Data Admin, memilih bulan dengan data lengkap, klik Run AHP, mengonfirmasi.</td>
-        <td>Sistem menghitung &amp; menampilkan ranking prioritas area beserta skor AHP.</td>
-        <td class="pass">Pass</td>
+        <td>Prasyarat: minimal 2 narasumber sudah berstatus Final di Master AHP dan panel Hasil Gabungan menunjukkan "Siap untuk Run AHP". Membuka Data Admin, memilih bulan dengan data lengkap, klik Run AHP, mengonfirmasi.</td>
+        <td>Sistem menghitung &amp; menampilkan ranking prioritas area beserta skor AHP. Bila narasumber final belum cukup, sistem menolak dengan pesan yang mengarahkan ke menu Master &gt; AHP.</td>
+        <td style="text-align:center;color:#a1a1aa">Belum diuji</td>
       </tr>
       <tr>
         <td>8</td>
@@ -114,8 +114,8 @@
         <td class="role">Admin</td>
         <td>Lihat Laporan Detail AHP</td>
         <td>Pada Data Admin, klik View Detail untuk bulan terpilih.</td>
-        <td>Laporan tampil lengkap: ranking, pairwise matrix, kontribusi kriteria, &amp; rekomendasi tindakan.</td>
-        <td class="pass">Pass</td>
+        <td>Laporan tampil lengkap: ranking, pairwise matrix, kontribusi kriteria, &amp; rekomendasi tindakan. Untuk hasil yang memakai penilaian narasumber, tampil keterangan "Disusun dari N narasumber (rata-rata geometrik)".</td>
+        <td style="text-align:center;color:#a1a1aa">Belum diuji</td>
       </tr>
       <tr>
         <td>9</td>
@@ -164,15 +164,24 @@
       </tr>
       <tr>
         <td>14</td>
-        <td>Admin menyesuaikan prioritas kriteria penilaian</td>
+        <td>Admin mencatat pendapat narasumber tentang seberapa penting tiap kriteria</td>
         <td class="role">Admin</td>
-        <td>Kelola Kriteria AHP</td>
-        <td>Membuka Master AHP, klik Edit pada kriteria, memilih rank baru, lalu Simpan.</td>
-        <td>Rank kriteria diperbarui &amp; rank kriteria lain tertukar otomatis agar tetap unik.</td>
-        <td class="pass">Pass</td>
+        <td>Kelola Penilaian Narasumber AHP</td>
+        <td>Membuka Master AHP, klik Tambah Narasumber, mengisi nama &amp; jabatan, lalu untuk setiap pasangan kriteria memilih mana yang lebih penting dan seberapa besar (skala 1–9). Setelah penilaian dinyatakan konsisten, klik Simpan final. Ulangi untuk narasumber kedua.</td>
+        <td>Sistem langsung menampilkan bobot tiap kriteria dan nilai konsistensi saat penilaian diisi. Penilaian tersimpan dengan status Final; setelah ada minimal 2 narasumber final, panel Hasil Gabungan menunjukkan "Siap untuk Run AHP".</td>
+        <td style="text-align:center;color:#a1a1aa">Belum diuji</td>
       </tr>
       <tr>
         <td>15</td>
+        <td>Admin dibantu sistem saat pendapat narasumber belum konsisten</td>
+        <td class="role">Admin</td>
+        <td>Kelola Penilaian Narasumber AHP</td>
+        <td>Mengisi pasangan kriteria yang saling bertentangan (mis. Konsumsi Energi lebih penting dari Biaya Listrik, Biaya Listrik lebih penting dari Frekuensi Maintenance, tetapi Frekuensi Maintenance justru lebih penting dari Konsumsi Energi), membaca peringatan, lalu menyimpan sebagai draft atau memperbaiki penilaian.</td>
+        <td>Sistem menampilkan peringatan bahwa penilaian belum konsisten beserta 2 pasangan yang perlu ditinjau; tombol Simpan final tidak dapat diklik, tetapi penilaian dapat disimpan sebagai draft untuk dilengkapi nanti.</td>
+        <td style="text-align:center;color:#a1a1aa">Belum diuji</td>
+      </tr>
+      <tr>
+        <td>16</td>
         <td>Staff memeriksa notifikasi pengingat input data</td>
         <td class="role">Staff</td>
         <td>Kelola Notifikasi</td>
@@ -181,7 +190,7 @@
         <td class="pass">Pass</td>
       </tr>
       <tr>
-        <td>16</td>
+        <td>17</td>
         <td>Admin membersihkan seluruh notifikasi</td>
         <td class="role">Admin</td>
         <td>Kelola Notifikasi</td>
@@ -193,9 +202,11 @@
   </table>
 
   <div class="summary">
-    <strong>Kesimpulan UAT:</strong> 16 skenario penerimaan yang mencakup seluruh 12 fitur Enerlyze
-    dan diuji oleh role Admin serta Staff seluruhnya berstatus <strong>Pass</strong>. Aplikasi
-    dinyatakan dapat diterima dan layak digunakan oleh pengguna akhir di lingkungan Lippo Mall Puri.
+    <strong>Kesimpulan UAT:</strong> terdapat 17 skenario penerimaan yang mencakup seluruh 12 fitur
+    Enerlyze untuk role Admin serta Staff. Sebanyak 13 skenario berstatus <strong>Pass</strong> dari
+    pengujian sebelumnya. 4 skenario terkait penilaian narasumber (Jalankan AHP, Laporan Detail, dan
+    Kelola Penilaian Narasumber) belum diuji. Kesimpulan penerimaan aplikasi ditetapkan setelah
+    keempat skenario tersebut diuji oleh pengguna.
   </div>
 </div>
 </body>

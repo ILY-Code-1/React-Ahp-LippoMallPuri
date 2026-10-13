@@ -120,11 +120,35 @@ if (Semua area sudah mengisi data?) then (ya)
   :Tekan Run / Re-run AHP &
   konfirmasi;
   |Sistem|
-  :Hitung bobot kriteria, konsistensi
-  & ranking prioritas area;
-  :Simpan hasil AHP bulan tsb;
-  :Tampilkan ranking & notifikasi berhasil;
-  stop
+  :Ambil penilaian narasumber berstatus final
+  & gabungkan dengan rata-rata geometrik;
+  if (Narasumber final >= MIN_EXPERTS (2)?) then (tidak)
+    :Tutup dialog & tampilkan pesan
+    "Run AHP ditolak: baru N narasumber berstatus final
+    (minimal 2). Lengkapi penilaian di menu Master > AHP.";
+    stop
+  elseif (Narasumber final <= MAX_EXPERTS (3)?) then (tidak)
+    :Tutup dialog & tampilkan pesan
+    "Run AHP ditolak: terdapat N narasumber final
+    (maksimal 3). Hapus narasumber berlebih di menu Master > AHP.";
+    stop
+  elseif (CR gabungan < CR_THRESHOLD (0,1)?) then (tidak)
+    :Tutup dialog & tampilkan pesan
+    "Run AHP ditolak: CR gabungan x ≥ 0.1. Tinjau ulang
+    penilaian narasumber di menu Master > AHP.";
+    stop
+  elseif (Data seluruh area masih lengkap?) then (tidak)
+    :Tutup dialog & tampilkan pesan
+    "Data belum lengkap di semua area untuk bulan ini.";
+    stop
+  else (ya, semua syarat terpenuhi)
+    :Hitung bobot kriteria dari matriks gabungan,
+    konsistensi & ranking prioritas area;
+    :Simpan hasil AHP bulan tsb
+    (snapshot weight_source & experts);
+    :Tampilkan ranking & notifikasi berhasil;
+    stop
+  endif
 else (tidak)
   :Nonaktifkan tombol Run AHP &
   tampilkan info data belum lengkap;
@@ -144,6 +168,11 @@ start
 if (Hasil AHP tersedia?) then (ya)
   :Tampilkan laporan lengkap
   (ranking, pairwise matrix, rekomendasi);
+  note right
+    Bila weight_source = expert_pairwise,
+    tampil keterangan "Disusun dari
+    N narasumber (rata-rata geometrik)".
+  end note
 else (tidak)
   :Tampilkan data input mentah
   tanpa ranking;
@@ -209,22 +238,63 @@ else (Hapus)
 endif
 @enduml
 
-' == Activity: Kelola Kriteria AHP ==
+' == Activity: Kelola Penilaian Narasumber AHP ==
 @startuml
-title Activity Diagram - Kelola Kriteria AHP (Atur Rank)
+title Activity Diagram - Kelola Penilaian Narasumber AHP
 |Admin|
 start
 :Buka menu Master AHP - Kriteria;
-:Tinjau empat kriteria penilaian;
-:Pilih kriteria & klik Edit;
-:Tentukan rank prioritas baru (1-4);
-:Tekan Simpan;
-|Sistem|
-:Tukar rank dengan kriteria
-yang sebelumnya memakai rank tsb;
-:Simpan perubahan rank;
-:Tampilkan notifikasi berhasil;
-stop
+:Tinjau empat kriteria, daftar narasumber
+& panel Hasil Gabungan;
+if (Pilih aksi?) then (Tambah / Edit)
+  if (Tambah & sudah ada 3 narasumber?) then (ya)
+    |Sistem|
+    :Tombol "Tambah Narasumber" nonaktif
+    (maksimal 3 narasumber);
+    stop
+  else (tidak)
+    |Admin|
+    :Isi nama & jabatan narasumber;
+    :Isi 6 perbandingan berpasangan
+    (KE-BL, KE-DO, KE-FM, BL-DO, BL-FM, DO-FM)
+    dengan skala Saaty 1/9-9;
+    |Sistem|
+    :Bentuk matriks resiprokal & hitung
+    bobot, lambda max, CI, CR secara langsung;
+    if (CR < 0,1?) then (ya)
+      |Admin|
+      :Tekan "Simpan final" atau "Simpan draft";
+    else (tidak)
+      |Sistem|
+      :Tampilkan peringatan CR >= 0,1 &
+      2 pasangan paling tidak konsisten;
+      :Nonaktifkan "Simpan final";
+      |Admin|
+      :Perbaiki perbandingan atau
+      tekan "Simpan draft";
+    endif
+    |Sistem|
+    if (Nama & jabatan terisi?) then (tidak)
+      :Tampilkan pesan "Nama narasumber wajib diisi."
+      / "Jabatan wajib diisi.";
+      stop
+    else (ya)
+      :Simpan penilaian (status draft / final);
+      :Tampilkan notifikasi berhasil &
+      perbarui daftar serta Hasil Gabungan;
+      stop
+    endif
+  endif
+else (Hapus)
+  |Admin|
+  :Konfirmasi hapus narasumber;
+  |Sistem|
+  :Hapus penilaian narasumber
+  (hasil AHP tersimpan tidak berubah);
+  :Tampilkan notifikasi berhasil &
+  perbarui Hasil Gabungan;
+  stop
+endif
 @enduml
 
 ' == Activity: Kelola Notifikasi ==

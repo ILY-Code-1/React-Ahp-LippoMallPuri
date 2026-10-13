@@ -16,7 +16,7 @@ rectangle "Enerlyze — Smart Energy Analysis & AHP Decision Engine\n(Lippo Mall
   usecase "Lihat Laporan Detail AHP" as UC6
   usecase "Kelola Master User" as UC7
   usecase "Kelola Master Area" as UC8
-  usecase "Kelola Kriteria AHP\n(Atur Rank)" as UC9
+  usecase "Kelola Penilaian\nNarasumber AHP" as UC9
   usecase "Kelola Notifikasi" as UC10
   usecase "Unduh Laporan PDF" as UC11
   usecase "Hapus Hasil AHP" as UC12

@@ -71,17 +71,28 @@
   <p>
     <strong>Embedding (denormalisasi)</strong> dipakai pada koleksi <code>ahp_results_enerlyze</code>.
     Saat fitur <em>Jalankan Analisis AHP</em> dieksekusi, hasil perhitungan — array <code>criteria</code>
-    (bobot tiap kriteria), matriks <code>criteria_matrix</code>, dan <code>ranking</code> (skor prioritas
+    (bobot tiap kriteria), matriks <code>criteria_matrix</code> (matriks gabungan narasumber),
+    <code>experts</code> (narasumber final yang dipakai), dan <code>ranking</code> (skor prioritas
     tiap area) — disimpan langsung sebagai array/map di dalam satu dokumen hasil. Hasil AHP bersifat
     <em>snapshot historis</em>: sekali dihitung untuk satu bulan, nilainya tidak boleh ikut berubah
-    walau master Area atau Kriteria kemudian disunting. Embedding menjaga laporan tetap konsisten dan
-    membuat halaman <em>Laporan Detail AHP</em> cukup membaca satu dokumen.
+    walau master Area atau penilaian narasumber kemudian disunting/dihapus. Embedding menjaga laporan
+    tetap konsisten dan membuat halaman <em>Laporan Detail AHP</em> cukup membaca satu dokumen.
   </p>
   <p>
-    Contoh konkret: dokumen <code>ahp_results_enerlyze/2026-04</code> menyimpan <code>ahp_id</code>
-    "AHP-2026-04", objek <code>consistency</code> berisi <code>cr</code> = 0.041, serta array
-    <code>ranking</code> yang sudah memuat <code>area_name</code> "Lantai 1" hasil snapshot —
-    tanpa perlu join ke <code>areas_enerlyze</code>.
+    Bobot kriteria berasal dari koleksi <code>ahp_judgments_enerlyze</code> (satu dokumen per
+    narasumber, maksimal 3). Saat Run AHP, penilaian berstatus <code>final</code> (minimal 2)
+    digabung dengan rata-rata geometrik; hasil gabungan dan identitas narasumbernya di-<em>embed</em>
+    ke dokumen hasil, dengan penanda <code>weight_source</code> = <code>"expert_pairwise"</code>.
+    Hasil lama (sebelum fitur narasumber) tidak memiliki <code>weight_source</code> dan
+    <code>experts</code>; bobotnya dibentuk dari <code>rank</code> kriteria.
+  </p>
+  <p>
+    Contoh konkret: dokumen <code>ahp_results_enerlyze/2026-05</code> menyimpan <code>ahp_id</code>
+    "AHP-2026-05", <code>weight_source</code> "expert_pairwise", <code>experts</code> berisi 2
+    narasumber, objek <code>consistency</code> berisi <code>cr</code> = 0.0022, serta array
+    <code>ranking</code> yang sudah memuat <code>area_name</code> "2F" (skor 0.2215, peringkat 1)
+    hasil snapshot — tanpa perlu join ke <code>areas_enerlyze</code> maupun
+    <code>ahp_judgments_enerlyze</code>.
   </p>
   <p>
     <strong>Catatan teknis (nested array):</strong> Firestore <em>tidak mendukung</em> nested array
@@ -89,11 +100,13 @@
     <code>number[][]</code>, melainkan diserialisasi ke bentuk <em>map-of-rows</em>
     <code>{ rows: [{ cells: [...] }] }</code> (helper <code>serializeMatrix()</code> pada
     <code>src/lib/ahp.js</code>), lalu dideserialisasi kembali ke matriks 2D dengan
-    <code>deserializeMatrix()</code> saat ditampilkan di halaman Laporan Detail AHP.
+    <code>deserializeMatrix()</code> saat ditampilkan di halaman Laporan Detail AHP. Hal yang sama
+    berlaku untuk <code>matrix</code> pada <code>ahp_judgments_enerlyze</code>, sedangkan
+    <code>pairs</code> disimpan sebagai array of map datar <code>{ a, b, value }</code>.
   </p>
 
   <h2><span class="no">02</span>Struktur Koleksi</h2>
-  <p>Enam koleksi root pada Firestore. Setiap koleksi diberi sufiks <code>_enerlyze</code> sesuai konvensi proyek.</p>
+  <p>Tujuh koleksi root pada Firestore. Setiap koleksi diberi sufiks <code>_enerlyze</code> sesuai konvensi proyek.</p>
   <div class="tree">
   <ul>
     <li>
@@ -118,12 +131,12 @@
       </ul>
     </li>
     <li>
-      <span class="col">criteria_enerlyze</span> &nbsp;<span style="color:#a1a1aa;font-size:12px">— doc ID = key (<code>energy</code>, <code>cost</code>, <code>duration</code>, <code>maintenance</code>)</span>
+      <span class="col">criteria_enerlyze</span> &nbsp;<span style="color:#a1a1aa;font-size:12px">— doc ID = key (<code>energy</code>, <code>cost</code>, <code>duration</code>, <code>maintenance</code>) · <strong>LEGACY</strong>: tidak lagi dibaca aplikasi; empat kriteria kini tetap di kode (<code>src/constants/criteria.js</code>)</span>
       <ul>
         <li><span class="field">key</span> <span class="type">string</span> — identitas stabil kriteria</li>
         <li><span class="field">code</span> <span class="type">string</span> — KE / BL / DO / FM</li>
         <li><span class="field">name</span> <span class="type">string</span></li>
-        <li><span class="field">rank</span> <span class="type">number</span> — 1..4 (unik)</li>
+        <li><span class="field">rank</span> <span class="type">number</span> — 1..4 (unik) · LEGACY, tidak lagi dipakai untuk bobot</li>
       </ul>
     </li>
     <li>
@@ -141,14 +154,28 @@
       </ul>
     </li>
     <li>
-      <span class="col">ahp_results_enerlyze</span> &nbsp;<span style="color:#a1a1aa;font-size:12px">— doc ID = month key (mis. <code>2026-04</code>)</span>
+      <span class="col">ahp_judgments_enerlyze</span> &nbsp;<span style="color:#a1a1aa;font-size:12px">— doc ID: auto · satu dokumen per narasumber, maksimal 3</span>
       <ul>
-        <li><span class="field">month</span> <span class="type">string</span> · <span class="field">ahp_id</span> <span class="type">string</span> — mis. "AHP-2026-04"</li>
-        <li><span class="field">criteria</span> <span class="type">array&lt;map&gt;</span> — <em>embedded</em>: {key, code, name, rank, weight}</li>
-        <li><span class="field">criteria_matrix</span> <span class="type">map</span> — matriks pairwise 4×4 bentuk <code>{ rows: [{ cells: [...] }] }</code> (Firestore-safe, bukan nested array)</li>
+        <li><span class="field">expert_name</span> <span class="type">string</span> · <span class="field">expert_position</span> <span class="type">string</span> — nama &amp; jabatan narasumber (wajib)</li>
+        <li><span class="field">criteria_codes</span> <span class="type">array&lt;string&gt;</span> — urutan baris/kolom matriks: <code>["KE","BL","DO","FM"]</code></li>
+        <li><span class="field">pairs</span> <span class="type">array&lt;map&gt;</span> — 6 × <code>{ a, b, value }</code>; <code>value</code> skala Saaty 1/9..9 (n bila <code>a</code> lebih penting, 1/n bila <code>b</code> lebih penting)</li>
+        <li><span class="field">matrix</span> <span class="type">map</span> — matriks resiprokal 4×4 bentuk <code>{ rows: [{ cells: [...] }] }</code></li>
+        <li><span class="field">weights</span> <span class="type">array&lt;number&gt;</span> · <span class="field">lambda_max</span> · <span class="field">ci</span> · <span class="field">cr</span> <span class="type">number</span> — hasil hitung dari <code>pairs</code></li>
+        <li><span class="field">status</span> <span class="type">string</span> — <code>"draft"</code> | <code>"final"</code> (final hanya bila <code>cr</code> &lt; 0,1)</li>
+        <li><span class="field">created_by</span> <span class="type">string</span> — nama/email admin · <span class="field">created_at</span> / <span class="field">updated_at</span> <span class="type">timestamp</span></li>
+      </ul>
+    </li>
+    <li>
+      <span class="col">ahp_results_enerlyze</span> &nbsp;<span style="color:#a1a1aa;font-size:12px">— doc ID = month key (mis. <code>2026-05</code>)</span>
+      <ul>
+        <li><span class="field">month</span> <span class="type">string</span> · <span class="field">ahp_id</span> <span class="type">string</span> — mis. "AHP-2026-05"</li>
+        <li><span class="field">weight_source</span> <span class="type">string</span> — <code>"expert_pairwise"</code>; tidak ada pada hasil lama (bobot dari rank)</li>
+        <li><span class="field">experts</span> <span class="type">array&lt;map&gt;</span> — <em>embedded snapshot</em>: {id, expert_name, expert_position, cr} narasumber final yang dipakai</li>
+        <li><span class="field">criteria</span> <span class="type">array&lt;map&gt;</span> — <em>embedded</em>: {key, code, name, weight} (hasil lama juga memuat <code>rank</code>)</li>
+        <li><span class="field">criteria_matrix</span> <span class="type">map</span> — matriks pairwise gabungan 4×4 (rata-rata geometrik) bentuk <code>{ rows: [{ cells: [...] }] }</code> (Firestore-safe, bukan nested array)</li>
         <li><span class="field">criteria_weights</span> <span class="type">array&lt;number&gt;</span></li>
         <li><span class="field">consistency</span> <span class="type">map</span> — {lambdaMax, ci, cr, isConsistent}</li>
-        <li><span class="field">ranking</span> <span class="type">array&lt;map&gt;</span> — <em>embedded</em>: {area_id, area_name, area_description, score, breakdown, rank}</li>
+        <li><span class="field">ranking</span> <span class="type">array&lt;map&gt;</span> — <em>embedded</em>: {area_id, area_name, area_description, score, breakdown, rank} (<code>rank</code> = peringkat area)</li>
         <li><span class="field">created_by</span> <span class="type">string</span> · <span class="field">created_at</span> <span class="type">timestamp</span></li>
       </ul>
     </li>
@@ -168,7 +195,9 @@
     Relasi antar koleksi diwujudkan lewat field referensi ID:
     <code>areas_enerlyze.user_id</code> → <code>users_enerlyze</code>,
     <code>data_enerlyze.area_id</code> → <code>areas_enerlyze</code>,
-    <code>data_enerlyze.created_by</code> &amp; <code>notifications_enerlyze.user_id</code> → <code>users_enerlyze</code>.
+    <code>data_enerlyze.created_by</code> &amp; <code>notifications_enerlyze.user_id</code> → <code>users_enerlyze</code>,
+    <code>ahp_results_enerlyze.experts[].id</code> → <code>ahp_judgments_enerlyze</code> (snapshot; dokumen
+    narasumber dapat dihapus kemudian tanpa mengubah hasil).
   </p>
 
   <h2><span class="no">03</span>Struktur Logis — Object Diagram</h2>
@@ -212,19 +241,40 @@ object "energi : data_enerlyze" as data {
   created_by = "u_8Kx2Lp"
 }
 
-object "kriteria : criteria_enerlyze" as crit {
+object "kriteria : criteria_enerlyze (legacy)" as crit {
   key = "energy"
   code = "KE"
   name = "Konsumsi Energi (kWh)"
-  rank = 1
+}
+
+object "narasumber : ahp_judgments_enerlyze" as judg {
+  id = "CWFLcuVlJiCHxUOwAIdm"
+  expert_name = "Narasumber Contoh 1 (contoh)"
+  expert_position = "Chief Engineering (contoh)"
+  criteria_codes = ["KE", "BL", "DO", "FM"]
+  pairs[0] = a "KE", b "BL", value 2
+  weights = [0.5125, 0.2755, 0.1377, 0.0743]
+  lambda_max = 4.0104
+  ci = 0.0035
+  cr = 0.0038
+  status = "final"
+  created_by = "Admin"
 }
 
 object "hasil : ahp_results_enerlyze" as ahp {
-  id = "2026-04"
-  ahp_id = "AHP-2026-04"
-  consistency.cr = 0.041
-  ranking[0].area_name = "Lantai 1"
-  ranking[0].score = 0.318
+  id = "2026-05"
+  ahp_id = "AHP-2026-05"
+  weight_source = "expert_pairwise"
+  experts[0].id = "CWFLcuVlJiCHxUOwAIdm"
+  experts[1].id = "Do4oM9eiWhqS0MaNIbi1"
+  criteria_weights = [0.4070, 0.3943, 0.1278, 0.0709]
+  consistency.lambdaMax = 4.0060
+  consistency.ci = 0.0020
+  consistency.cr = 0.0022
+  ranking[0].area_name = "2F"
+  ranking[0].score = 0.2215
+  ranking[0].rank = 1
+  created_by = "Admin"
 }
 
 object "notif : notifications_enerlyze" as notif {
@@ -239,12 +289,13 @@ data --> area : area_id
 data --> user : created_by
 notif --> user : user_id
 ahp ..> data : sumber perhitungan
-ahp ..> crit : memakai bobot kriteria
+ahp ..> judg : experts (bobot dari narasumber final)
+judg ..> crit : membandingkan kriteria (code)
 @enduml
   </pre>
 
   <h2><span class="no">04</span>Spesifikasi Basis Data</h2>
-  <p>Dokumentasi seluruh field dari keenam koleksi Firestore.</p>
+  <p>Dokumentasi seluruh field dari ketujuh koleksi Firestore.</p>
   <table>
     <thead>
       <tr>
@@ -264,10 +315,10 @@ ahp ..> crit : memakai bobot kriteria
       <tr><td>9</td><td>user_id</td><td>string</td><td>areas_enerlyze</td><td>Referensi user penanggung jawab area.</td><td>required, FK → users_enerlyze, indexed</td></tr>
       <tr><td>10</td><td>created_at</td><td>timestamp</td><td>areas_enerlyze</td><td>Waktu pembuatan area.</td><td>serverTimestamp</td></tr>
       <tr><td>11</td><td>updated_at</td><td>timestamp</td><td>areas_enerlyze</td><td>Waktu pembaruan terakhir area.</td><td>serverTimestamp</td></tr>
-      <tr><td>12</td><td>key</td><td>string</td><td>criteria_enerlyze</td><td>Identitas stabil kriteria (= document ID).</td><td>required, unique (doc ID)</td></tr>
-      <tr><td>13</td><td>code</td><td>string</td><td>criteria_enerlyze</td><td>Kode singkat kriteria (KE/BL/DO/FM).</td><td>required</td></tr>
-      <tr><td>14</td><td>name</td><td>string</td><td>criteria_enerlyze</td><td>Nama lengkap kriteria penilaian.</td><td>required</td></tr>
-      <tr><td>15</td><td>rank</td><td>number</td><td>criteria_enerlyze</td><td>Peringkat prioritas kriteria (1 tertinggi).</td><td>required, unique 1..4</td></tr>
+      <tr><td>12</td><td>key</td><td>string</td><td>criteria_enerlyze</td><td>LEGACY — identitas stabil kriteria (= document ID). Koleksi tidak lagi dibaca aplikasi.</td><td>required, unique (doc ID)</td></tr>
+      <tr><td>13</td><td>code</td><td>string</td><td>criteria_enerlyze</td><td>LEGACY — kode singkat kriteria (KE/BL/DO/FM).</td><td>required</td></tr>
+      <tr><td>14</td><td>name</td><td>string</td><td>criteria_enerlyze</td><td>LEGACY — nama lengkap kriteria penilaian.</td><td>required</td></tr>
+      <tr><td>15</td><td>rank</td><td>number</td><td>criteria_enerlyze</td><td>LEGACY — peringkat prioritas kriteria (1 tertinggi). Tidak lagi dipakai untuk bobot; dipertahankan untuk data lama.</td><td>unique 1..4 (data lama)</td></tr>
       <tr><td>16</td><td>area_id</td><td>string</td><td>data_enerlyze</td><td>Referensi area pemilik catatan energi.</td><td>required, FK → areas_enerlyze, indexed</td></tr>
       <tr><td>17</td><td>month</td><td>string</td><td>data_enerlyze</td><td>Periode data, format <code>YYYY-MM</code>.</td><td>required, indexed</td></tr>
       <tr><td>18</td><td>energy</td><td>number</td><td>data_enerlyze</td><td>Konsumsi energi listrik (kWh).</td><td>required, ≥ 0</td></tr>
@@ -278,20 +329,35 @@ ahp ..> crit : memakai bobot kriteria
       <tr><td>23</td><td>created_by</td><td>string</td><td>data_enerlyze</td><td>Referensi user penginput data.</td><td>FK → users_enerlyze, nullable</td></tr>
       <tr><td>24</td><td>created_at</td><td>timestamp</td><td>data_enerlyze</td><td>Waktu input data.</td><td>serverTimestamp</td></tr>
       <tr><td>25</td><td>updated_at</td><td>timestamp</td><td>data_enerlyze</td><td>Waktu pembaruan data.</td><td>serverTimestamp</td></tr>
-      <tr><td>26</td><td>month</td><td>string</td><td>ahp_results_enerlyze</td><td>Periode hasil AHP (= document ID).</td><td>required, unique (doc ID)</td></tr>
-      <tr><td>27</td><td>ahp_id</td><td>string</td><td>ahp_results_enerlyze</td><td>Kode hasil, mis. "AHP-2026-04".</td><td>required</td></tr>
-      <tr><td>28</td><td>criteria</td><td>array&lt;map&gt;</td><td>ahp_results_enerlyze</td><td>Embedded — daftar kriteria + bobot saat analisis.</td><td>embedded snapshot</td></tr>
-      <tr><td>29</td><td>criteria_matrix</td><td>map</td><td>ahp_results_enerlyze</td><td>Matriks pairwise Saaty 4×4 antar kriteria, disimpan sebagai <code>{ rows: [{ cells: [...] }] }</code>.</td><td>embedded (rows/cells — Firestore tak mendukung nested array)</td></tr>
-      <tr><td>30</td><td>criteria_weights</td><td>array&lt;number&gt;</td><td>ahp_results_enerlyze</td><td>Vektor bobot prioritas kriteria.</td><td>embedded</td></tr>
-      <tr><td>31</td><td>consistency</td><td>map</td><td>ahp_results_enerlyze</td><td>Metrik konsistensi: lambdaMax, ci, cr, isConsistent.</td><td>embedded</td></tr>
-      <tr><td>32</td><td>ranking</td><td>array&lt;map&gt;</td><td>ahp_results_enerlyze</td><td>Embedded — skor &amp; peringkat prioritas tiap area.</td><td>embedded snapshot</td></tr>
-      <tr><td>33</td><td>created_by</td><td>string</td><td>ahp_results_enerlyze</td><td>Nama admin penyusun hasil AHP.</td><td>required</td></tr>
-      <tr><td>34</td><td>created_at</td><td>timestamp</td><td>ahp_results_enerlyze</td><td>Waktu analisis AHP dijalankan.</td><td>serverTimestamp</td></tr>
-      <tr><td>35</td><td>user_id</td><td>string</td><td>notifications_enerlyze</td><td>Referensi user penerima notifikasi.</td><td>required, FK → users_enerlyze, indexed</td></tr>
-      <tr><td>36</td><td>type</td><td>string</td><td>notifications_enerlyze</td><td>Jenis notifikasi (missing-data / ahp-pending).</td><td>required</td></tr>
-      <tr><td>37</td><td>message</td><td>string</td><td>notifications_enerlyze</td><td>Isi pesan notifikasi.</td><td>required</td></tr>
-      <tr><td>38</td><td>link</td><td>string</td><td>notifications_enerlyze</td><td>Rute tujuan saat notifikasi diklik.</td><td>required</td></tr>
-      <tr><td>39</td><td>created_at</td><td>timestamp</td><td>notifications_enerlyze</td><td>Waktu notifikasi dibuat.</td><td>serverTimestamp</td></tr>
+      <tr><td>26</td><td>expert_name</td><td>string</td><td>ahp_judgments_enerlyze</td><td>Nama narasumber, mis. "Narasumber Contoh 1 (contoh)".</td><td>required (di-trim)</td></tr>
+      <tr><td>27</td><td>expert_position</td><td>string</td><td>ahp_judgments_enerlyze</td><td>Jabatan narasumber, mis. "Chief Engineering (contoh)".</td><td>required (di-trim)</td></tr>
+      <tr><td>28</td><td>criteria_codes</td><td>array&lt;string&gt;</td><td>ahp_judgments_enerlyze</td><td>Urutan baris/kolom matriks: <code>["KE","BL","DO","FM"]</code>.</td><td>required</td></tr>
+      <tr><td>29</td><td>pairs</td><td>array&lt;map&gt;</td><td>ahp_judgments_enerlyze</td><td>Enam perbandingan berpasangan <code>{ a, b, value }</code>; <code>value</code> = n bila <code>a</code> lebih penting, 1/n bila <code>b</code> lebih penting. Sumber data matriks.</td><td>required, tepat 6 pasangan unik, value ∈ {1/9..1/2, 1, 2..9}</td></tr>
+      <tr><td>30</td><td>matrix</td><td>map</td><td>ahp_judgments_enerlyze</td><td>Matriks resiprokal 4×4 dari <code>pairs</code>, disimpan sebagai <code>{ rows: [{ cells: [...] }] }</code>.</td><td>turunan (dihitung dari pairs)</td></tr>
+      <tr><td>31</td><td>weights</td><td>array&lt;number&gt;</td><td>ahp_judgments_enerlyze</td><td>Bobot kriteria narasumber (urutan sesuai <code>criteria_codes</code>).</td><td>turunan</td></tr>
+      <tr><td>32</td><td>lambda_max</td><td>number</td><td>ahp_judgments_enerlyze</td><td>Nilai λmax matriks narasumber.</td><td>turunan</td></tr>
+      <tr><td>33</td><td>ci</td><td>number</td><td>ahp_judgments_enerlyze</td><td>Consistency Index matriks narasumber.</td><td>turunan</td></tr>
+      <tr><td>34</td><td>cr</td><td>number</td><td>ahp_judgments_enerlyze</td><td>Consistency Ratio matriks narasumber (RI n=4 = 0,90).</td><td>turunan</td></tr>
+      <tr><td>35</td><td>status</td><td>string</td><td>ahp_judgments_enerlyze</td><td>Status penilaian: draft atau final. Hanya penilaian final yang dipakai Run AHP.</td><td>required, enum(draft|final); final hanya bila cr &lt; 0,1</td></tr>
+      <tr><td>36</td><td>created_by</td><td>string</td><td>ahp_judgments_enerlyze</td><td>Nama (atau email) admin yang menyimpan penilaian.</td><td>required</td></tr>
+      <tr><td>37</td><td>created_at</td><td>timestamp</td><td>ahp_judgments_enerlyze</td><td>Waktu penilaian dibuat.</td><td>serverTimestamp</td></tr>
+      <tr><td>38</td><td>updated_at</td><td>timestamp</td><td>ahp_judgments_enerlyze</td><td>Waktu penilaian terakhir disimpan.</td><td>serverTimestamp</td></tr>
+      <tr><td>39</td><td>month</td><td>string</td><td>ahp_results_enerlyze</td><td>Periode hasil AHP (= document ID).</td><td>required, unique (doc ID)</td></tr>
+      <tr><td>40</td><td>ahp_id</td><td>string</td><td>ahp_results_enerlyze</td><td>Kode hasil, mis. "AHP-2026-05".</td><td>required</td></tr>
+      <tr><td>41</td><td>weight_source</td><td>string</td><td>ahp_results_enerlyze</td><td>Sumber bobot kriteria: <code>"expert_pairwise"</code>. Tidak ada pada hasil lama (bobot dari rank kriteria).</td><td>hasil baru: required</td></tr>
+      <tr><td>42</td><td>experts</td><td>array&lt;map&gt;</td><td>ahp_results_enerlyze</td><td>Embedded — narasumber final yang dipakai: {id, expert_name, expert_position, cr}.</td><td>embedded snapshot; hasil baru: 2–3 item</td></tr>
+      <tr><td>43</td><td>criteria</td><td>array&lt;map&gt;</td><td>ahp_results_enerlyze</td><td>Embedded — daftar kriteria + bobot saat analisis: {key, code, name, weight} (hasil lama juga memuat rank).</td><td>embedded snapshot</td></tr>
+      <tr><td>44</td><td>criteria_matrix</td><td>map</td><td>ahp_results_enerlyze</td><td>Matriks pairwise gabungan 4×4 (rata-rata geometrik penilaian narasumber final), disimpan sebagai <code>{ rows: [{ cells: [...] }] }</code>.</td><td>embedded (rows/cells — Firestore tak mendukung nested array)</td></tr>
+      <tr><td>45</td><td>criteria_weights</td><td>array&lt;number&gt;</td><td>ahp_results_enerlyze</td><td>Vektor bobot prioritas kriteria dari matriks gabungan.</td><td>embedded</td></tr>
+      <tr><td>46</td><td>consistency</td><td>map</td><td>ahp_results_enerlyze</td><td>Metrik konsistensi matriks gabungan: lambdaMax, ci, cr, isConsistent.</td><td>embedded; Run AHP ditolak bila cr ≥ 0,1</td></tr>
+      <tr><td>47</td><td>ranking</td><td>array&lt;map&gt;</td><td>ahp_results_enerlyze</td><td>Embedded — skor &amp; peringkat prioritas tiap area ({area_id, area_name, area_description, score, breakdown, rank}).</td><td>embedded snapshot</td></tr>
+      <tr><td>48</td><td>created_by</td><td>string</td><td>ahp_results_enerlyze</td><td>Nama admin penyusun hasil AHP.</td><td>required</td></tr>
+      <tr><td>49</td><td>created_at</td><td>timestamp</td><td>ahp_results_enerlyze</td><td>Waktu analisis AHP dijalankan.</td><td>serverTimestamp</td></tr>
+      <tr><td>50</td><td>user_id</td><td>string</td><td>notifications_enerlyze</td><td>Referensi user penerima notifikasi.</td><td>required, FK → users_enerlyze, indexed</td></tr>
+      <tr><td>51</td><td>type</td><td>string</td><td>notifications_enerlyze</td><td>Jenis notifikasi (missing-data / ahp-pending).</td><td>required</td></tr>
+      <tr><td>52</td><td>message</td><td>string</td><td>notifications_enerlyze</td><td>Isi pesan notifikasi.</td><td>required</td></tr>
+      <tr><td>53</td><td>link</td><td>string</td><td>notifications_enerlyze</td><td>Rute tujuan saat notifikasi diklik.</td><td>required</td></tr>
+      <tr><td>54</td><td>created_at</td><td>timestamp</td><td>notifications_enerlyze</td><td>Waktu notifikasi dibuat.</td><td>serverTimestamp</td></tr>
     </tbody>
   </table>
 
@@ -300,7 +366,10 @@ ahp ..> crit : memakai bobot kriteria
     Integritas referensial dijaga di lapisan aplikasi — mis. <span class="pill">GUARD</span>
     user yang masih memegang area tidak dapat dihapus, area yang masih memiliki catatan
     <code>data_enerlyze</code> tidak dapat dihapus, dan satu pasangan (area + bulan) hanya boleh
-    memiliki satu dokumen <code>data_enerlyze</code>.
+    memiliki satu dokumen <code>data_enerlyze</code>. Untuk <code>ahp_judgments_enerlyze</code>:
+    maksimal 3 dokumen narasumber (draft + final), status <code>final</code> hanya dapat disimpan bila
+    <code>cr</code> &lt; 0,1, dan Run AHP ditolak bila narasumber final kurang dari 2 atau CR gabungan
+    ≥ 0,1.
   </div>
 
 </div>

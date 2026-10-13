@@ -24,6 +24,8 @@
   code { background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 3px; padding: 0 4px; font-size: 12px; }
   pre.plantuml { background: #18181b; color: #e4e4e7; padding: 16px 18px; border-radius: 9px;
     font-size: 11.5px; overflow-x: auto; line-height: 1.45; }
+  pre.code { background: #fafafa; color: #27272a; border: 1px solid #e4e4e7; padding: 14px 16px;
+    border-radius: 9px; font-size: 11.5px; overflow-x: auto; line-height: 1.5; }
   .trace { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px;
     padding: 9px 14px; font-size: 12.5px; color: #1e40af; }
   .cc { background: #18181b; color: #fff; display: inline-block; padding: 2px 10px;
@@ -39,8 +41,8 @@
   </div>
   <p>
     Pengujian white box difokuskan pada modul-modul inti yang memuat percabangan logika non-trivial —
-    yaitu fungsi autentikasi, penyimpanan data dengan guard duplikasi, mesin AHP, dan pengaturan rank
-    kriteria. Rumus yang dipakai: <strong>V(G) = E − N + 2P</strong> (E = jumlah edge, N = jumlah node,
+    yaitu fungsi autentikasi, penyimpanan data dengan guard duplikasi, pembentukan matriks perbandingan
+    berpasangan narasumber, dan pengecekan syarat Run AHP. Rumus yang dipakai: <strong>V(G) = E − N + 2P</strong> (E = jumlah edge, N = jumlah node,
     P = jumlah komponen terhubung) yang ekuivalen dengan <strong>V(G) = jumlah predikat + 1</strong>.
   </p>
 
@@ -197,44 +199,87 @@ N5 --> N6
   </table>
 
   <!-- ============== FUNGSI 3 ============== -->
-  <h2>Fungsi 3 — buildCriteriaMatrix()</h2>
+  <h2>Fungsi 3 — buildMatrixFromPairs()</h2>
   <div class="trace">
-    <strong>Code traceability:</strong> berkas <code>src/lib/ahp.js</code> baris 44–60
-    (pembentukan matriks pairwise Saaty dari rank kriteria).
+    <strong>Code traceability:</strong> berkas <code>src/lib/ahp.js</code> baris 62–91
+    (pembentukan matriks perbandingan berpasangan resiprokal dari penilaian satu narasumber, beserta
+    validasi nilai skala Saaty; memanggil <code>isSaatyValue()</code> baris 32–33).
   </div>
 
-  <h3>3.1 Flowchart</h3>
+  <h3>3.1 Kode Sumber</h3>
+  <pre class="code"> 62  export const buildMatrixFromPairs = (criteriaCodes, pairs = []) =&gt; {
+ 63    const n = criteriaCodes.length
+ 64    const index = Object.fromEntries(criteriaCodes.map((c, i) =&gt; [c, i]))
+ 65    const matrix = Array.from({ length: n }, () =&gt; Array(n).fill(1))
+ 66    const seen = new Set()
+ 67  
+ 68    for (const p of pairs) {
+ 69      const i = index[p?.a]
+ 70      const j = index[p?.b]
+ 71      if (i === undefined || j === undefined || i === j) {
+ 72        throw new Error(`Pasangan kriteria tidak valid: ${p?.a} – ${p?.b}.`)
+ 73      }
+ 74      const value = Number(p.value)
+ 75      if (!isSaatyValue(value)) {
+ 76        throw new Error(`Nilai ${p.a} – ${p.b} harus pada skala Saaty 1/9..9.`)
+ 77      }
+ 78      const [lo, hi, v] = i &lt; j ? [i, j, value] : [j, i, 1 / value]
+ 79      const key = `${lo}-${hi}`
+ 80      if (seen.has(key)) throw new Error(`Pasangan ${p.a} – ${p.b} diisi lebih dari sekali.`)
+ 81      seen.add(key)
+ 82      matrix[lo][hi] = v
+ 83      matrix[hi][lo] = 1 / v
+ 84    }
+ 85  
+ 86    const expected = (n * (n - 1)) / 2
+ 87    if (seen.size !== expected) {
+ 88      throw new Error(`Perbandingan belum lengkap: ${seen.size} dari ${expected} pasangan terisi.`)
+ 89    }
+ 90    return matrix
+ 91  }</pre>
+
+  <h3>3.2 Flowchart</h3>
   <pre class="plantuml">
 @startuml
-title Flowchart - buildCriteriaMatrix()
+title Flowchart - buildMatrixFromPairs()
 start
-:Inisialisasi matrix n x n bernilai 1; i = 0;
-while (i < n ?) is (ya)
-  :j = 0;
-  while (j < n ?) is (ya)
-    if (i sama dengan j ?) then (ya)
-      :matrix[i][j] = 1;
-    else (tidak)
-      :Hitung diff rank & nilai Saaty;
-      if (diff >= 0 ?) then (ya)
-        :matrix[i][j] = saaty;
-      else (tidak)
-        :matrix[i][j] = 1 / saaty;
-      endif
-    endif
-    :j = j + 1;
-  endwhile (tidak)
-  :i = i + 1;
+:Inisialisasi index kriteria, matrix n x n bernilai 1,
+dan himpunan seen kosong;
+while (Masih ada pasangan p?) is (ya)
+  :i = index[p.a], j = index[p.b];
+  if (i atau j tidak dikenal, atau i sama dengan j?) then (ya)
+    :Lempar error "Pasangan kriteria tidak valid";
+    stop
+  endif
+  :value = Number(p.value);
+  if (value bukan nilai skala Saaty 1/9..9?) then (ya)
+    :Lempar error "Nilai ... harus pada skala Saaty 1/9..9";
+    stop
+  endif
+  if (i lebih kecil dari j?) then (ya)
+    :lo = i, hi = j, v = value;
+  else (tidak)
+    :lo = j, hi = i, v = 1 / value;
+  endif
+  if (Pasangan lo-hi sudah pernah diisi?) then (ya)
+    :Lempar error "Pasangan ... diisi lebih dari sekali";
+    stop
+  endif
+  :Tandai lo-hi, matrix[lo][hi] = v, matrix[hi][lo] = 1 / v;
 endwhile (tidak)
+if (Jumlah pasangan terisi sama dengan n(n-1)/2?) then (tidak)
+  :Lempar error "Perbandingan belum lengkap";
+  stop
+endif
 :Kembalikan matrix;
 stop
 @enduml
   </pre>
 
-  <h3>3.2 Flowgraph</h3>
+  <h3>3.3 Flowgraph</h3>
   <pre class="plantuml">
 @startuml
-title Flowgraph - buildCriteriaMatrix()
+title Flowgraph - buildMatrixFromPairs()
 circle "1" as N1
 circle "2" as N2
 circle "3" as N3
@@ -247,91 +292,129 @@ circle "9" as N9
 circle "10" as N10
 circle "11" as N11
 circle "12" as N12
+circle "13" as N13
+circle "14" as N14
+circle "15" as N15
+circle "16" as N16
 N1 --> N2
-N2 --> N3 : i<n
-N2 --> N12 : i>=n
-N3 --> N4
-N4 --> N5 : j<n
-N4 --> N11 : j>=n
-N5 --> N6 : i==j
-N5 --> N7 : i!=j
-N6 --> N10
-N7 --> N8 : diff>=0
-N7 --> N9 : diff<0
+N2 --> N3 : ada pasangan
+N2 --> N13 : pasangan habis
+N3 --> N4 : tidak valid
+N3 --> N5 : valid
+N4 --> N16
+N5 --> N6 : bukan Saaty
+N5 --> N7 : nilai Saaty
+N6 --> N16
+N7 --> N8 : i&lt;j
+N7 --> N9 : i&gt;j
 N8 --> N10
 N9 --> N10
-N10 --> N4
-N11 --> N2
+N10 --> N11 : duplikat
+N10 --> N12 : baru
+N11 --> N16
+N12 --> N2
+N13 --> N14 : belum lengkap
+N13 --> N15 : lengkap
+N14 --> N16
+N15 --> N16
 @enduml
   </pre>
   <p style="font-size:12.5px;color:#52525b">
-    Node: 1 = init matrix · 2 = uji loop luar · 3 = j=0 · 4 = uji loop dalam ·
-    5 = uji i==j · 6 = set diagonal · 7 = hitung diff &amp; saaty · 8 = set saaty ·
-    9 = set 1/saaty · 10 = j++ · 11 = i++ · 12 = return.
+    Node: 1 = inisialisasi (baris 63–66) · 2 = uji loop <code>for…of</code> (68) ·
+    3 = hitung i, j &amp; uji pasangan tidak valid (69–71) · 4 = throw pasangan tidak valid (72) ·
+    5 = <code>Number(p.value)</code> &amp; uji <code>isSaatyValue</code> (74–75) · 6 = throw bukan Saaty (76) ·
+    7 = uji orientasi <code>i &lt; j</code> (78) · 8 = orientasi tetap · 9 = orientasi dibalik (1/value) ·
+    10 = bentuk key &amp; uji duplikat (79–80) · 11 = throw duplikat (80) ·
+    12 = tandai &amp; isi sel resiprokal (81–83) · 13 = uji kelengkapan (86–87) ·
+    14 = throw belum lengkap (88) · 15 = return matrix (90) · 16 = selesai.
+    Kondisi majemuk pada baris 71 (<code>i === undefined || j === undefined || i === j</code>)
+    diperlakukan sebagai satu node predikat.
   </p>
 
-  <h3>3.3 Cyclomatic Complexity</h3>
+  <h3>3.4 Cyclomatic Complexity</h3>
   <table>
     <thead><tr><th>Komponen</th><th>Nilai</th><th>Perhitungan</th></tr></thead>
     <tbody>
-      <tr><td>Edge (E)</td><td>15</td><td>Jumlah panah pada flowgraph</td></tr>
-      <tr><td>Node (N)</td><td>12</td><td>Jumlah simpul pada flowgraph</td></tr>
-      <tr><td>Predikat</td><td>4</td><td>Node 2, 4, 5, 7</td></tr>
-      <tr><td>V(G) = E − N + 2P</td><td>15 − 12 + 2 = <span class="cc">5</span></td><td>P = 1</td></tr>
-      <tr><td>V(G) = Predikat + 1</td><td>4 + 1 = <span class="cc">5</span></td><td>Hasil konsisten</td></tr>
+      <tr><td>Edge (E)</td><td>21</td><td>Jumlah panah pada flowgraph</td></tr>
+      <tr><td>Node (N)</td><td>16</td><td>Jumlah simpul pada flowgraph</td></tr>
+      <tr><td>Predikat</td><td>6</td><td>Node 2, 3, 5, 7, 10, 13</td></tr>
+      <tr><td>V(G) = E − N + 2P</td><td>21 − 16 + 2 = <span class="cc">7</span></td><td>P = 1</td></tr>
+      <tr><td>V(G) = Predikat + 1</td><td>6 + 1 = <span class="cc">7</span></td><td>Hasil konsisten</td></tr>
+      <tr><td>Jumlah Region (R)</td><td><span class="cc">7</span></td><td>6 region tertutup + 1 region luar (flowgraph planar)</td></tr>
     </tbody>
   </table>
 
-  <h3>3.4 Basis Path &amp; Test Case</h3>
+  <h3>3.5 Basis Path &amp; Test Case</h3>
   <table>
-    <thead><tr><th>Path</th><th>Jalur Node</th><th>Skenario</th><th>Data Uji</th><th>Hasil Diharapkan</th></tr></thead>
+    <thead><tr><th>Path</th><th>Jalur Node</th><th>Skenario</th><th>Data Uji</th><th>Hasil Diharapkan</th><th>Hasil Aktual</th></tr></thead>
     <tbody>
-      <tr><td>P1</td><td>1-2-12</td><td>Tidak ada kriteria (n = 0)</td><td>criteria = []</td><td>Matrix kosong dikembalikan</td></tr>
-      <tr><td>P2</td><td>1-2-3-4-11-2-12</td><td>Loop dalam tidak dieksekusi (n = 1)</td><td>1 kriteria</td><td>Matrix 1×1 = [[1]]</td></tr>
-      <tr><td>P3</td><td>1-2-3-4-5-6-10-...</td><td>Sel diagonal (i = j)</td><td>4 kriteria, sel [0][0]</td><td>matrix[i][j] = 1</td></tr>
-      <tr><td>P4</td><td>1-2-3-4-5-7-8-10-...</td><td>Kriteria i lebih unggul (diff ≥ 0)</td><td>rank i=1, j=3</td><td>matrix[i][j] = nilai Saaty (mis. 5)</td></tr>
-      <tr><td>P5</td><td>1-2-3-4-5-7-9-10-...</td><td>Kriteria i kalah (diff &lt; 0)</td><td>rank i=3, j=1</td><td>matrix[i][j] = 1/saaty (mis. 1/5)</td></tr>
+      <tr><td>P1</td><td>1-2-13-14-16</td><td>Tidak ada pasangan sama sekali</td><td>pairs = []</td><td>Error "Perbandingan belum lengkap: 0 dari 6 pasangan terisi."</td><td><em>Belum tercakup test otomatis</em></td></tr>
+      <tr><td>P2</td><td>1-2-3-4-16</td><td>Kode kriteria tidak dikenal</td><td>{ a: "KE", b: "XX", value: 1 } + 5 pasangan lain</td><td>Error "Pasangan kriteria tidak valid: KE – XX."</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: rejects invalid input</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P3</td><td>1-2-3-5-6-16</td><td>Nilai di luar skala Saaty</td><td>KE–BL = 0, 10, 1/10, 2.5, −3, NaN</td><td>Error "Nilai KE – BL harus pada skala Saaty 1/9..9."</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: rejects invalid input</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P4</td><td>1-2-3-5-7-8-10-12-2-…-13-15-16</td><td>6 pasangan valid, orientasi a sebelum b</td><td>KE–BL 2, KE–DO 1/4, KE–FM 9, BL–DO 1, BL–FM 1/9, DO–FM 6</td><td>Matriks 4×4 dengan diagonal 1 dan a<sub>ji</sub> = 1/a<sub>ij</sub> (mis. [0][2] = 1/4, [2][0] = 4)</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: reciprocal, diagonal 1, either orientation</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P5</td><td>1-2-3-5-7-9-10-12-2-…-13-15-16</td><td>Pasangan diberikan terbalik (b, a)</td><td>Seperti P4, tetapi KE–FM ditulis { a: "FM", b: "KE", value: 1/9 }</td><td>Nilai dibalik otomatis; matriks identik dengan P4</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: reciprocal, diagonal 1, either orientation</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P6</td><td>1-2-3-5-7-8-10-12-2-3-5-7-8-10-11-16</td><td>Pasangan yang sama diisi dua kali</td><td>6 pasangan bernilai 1 + KE–BL sekali lagi</td><td>Error "Pasangan KE – BL diisi lebih dari sekali."</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: rejects invalid input</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P7</td><td>1-2-3-5-7-8-10-12-2-…-13-14-16</td><td>Pasangan kurang dari 6</td><td>5 pasangan pertama saja</td><td>Error "Perbandingan belum lengkap: 5 dari 6 pasangan terisi."</td><td>Sesuai harapan — tercakup test <code>b. buildMatrixFromPairs: rejects invalid input</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
     </tbody>
   </table>
 
   <!-- ============== FUNGSI 4 ============== -->
-  <h2>Fungsi 4 — updateCriterionRank()</h2>
+  <h2>Fungsi 4 — expertWeightsBlocker()</h2>
   <div class="trace">
-    <strong>Code traceability:</strong> berkas <code>src/services/criteriaService.js</code> baris 50–63
-    (penukaran rank agar rank 1–4 tetap unik).
+    <strong>Code traceability:</strong> berkas <code>src/lib/ahp.js</code> baris 321–335
+    (pengecekan syarat Run AHP dari penilaian narasumber; dipanggil oleh <code>runAndSaveAHP()</code>
+    di <code>src/services/ahpService.js</code>). Mengembalikan pesan penolakan, atau <code>null</code>
+    bila Run AHP boleh dilanjutkan. Syarat kelengkapan data area diperiksa terpisah di
+    <code>runAndSaveAHP()</code>, bukan di fungsi ini.
   </div>
 
-  <h3>4.1 Flowchart</h3>
+  <h3>4.1 Kode Sumber</h3>
+  <pre class="code">321  export const expertWeightsBlocker = (
+322    { experts, combined },
+323    { min = MIN_EXPERTS, max = MAX_EXPERTS } = {},
+324  ) =&gt; {
+325    if (experts.length &lt; min) {
+326      return `Run AHP ditolak: baru ${experts.length} narasumber berstatus final (minimal ${min}). Lengkapi penilaian di menu Master &gt; AHP.`
+327    }
+328    if (experts.length &gt; max) {
+329      return `Run AHP ditolak: terdapat ${experts.length} narasumber final (maksimal ${max}). Hapus narasumber berlebih di menu Master &gt; AHP.`
+330    }
+331    if (!combined.isConsistent) {
+332      return `Run AHP ditolak: CR gabungan ${combined.cr.toFixed(3)} ≥ ${CR_THRESHOLD}. Tinjau ulang penilaian narasumber di menu Master &gt; AHP.`
+333    }
+334    return null
+335  }</pre>
+
+  <h3>4.2 Flowchart</h3>
   <pre class="plantuml">
 @startuml
-title Flowchart - updateCriterionRank()
+title Flowchart - expertWeightsBlocker()
 start
-:Ambil daftar kriteria & cari target;
-if (Kriteria target ditemukan?) then (tidak)
-  :Lempar error "Kriteria tidak ditemukan";
+:Terima experts (narasumber final), combined (hasil gabungan),
+min = MIN_EXPERTS (2), max = MAX_EXPERTS (3);
+if (Jumlah narasumber final kurang dari min?) then (ya)
+  :Kembalikan "Run AHP ditolak: baru N narasumber berstatus final
+  (minimal 2). Lengkapi penilaian di menu Master &gt; AHP.";
   stop
-else (ya)
-  if (rank target sama dengan rank baru?) then (ya)
-    :Selesai tanpa perubahan;
-    stop
-  else (tidak)
-    :Cari kriteria pemilik rank baru (occupant);
-    :Set rank baru untuk target;
-    if (Occupant ditemukan?) then (ya)
-      :Set rank lama target untuk occupant;
-    else (tidak)
-    endif
-    :Commit perubahan batch;
-    stop
-  endif
+elseif (Jumlah narasumber final lebih dari max?) then (ya)
+  :Kembalikan "Run AHP ditolak: terdapat N narasumber final
+  (maksimal 3). Hapus narasumber berlebih di menu Master &gt; AHP.";
+  stop
+elseif (Matriks gabungan tidak konsisten (CR &gt;= 0,1)?) then (ya)
+  :Kembalikan "Run AHP ditolak: CR gabungan x ≥ 0.1. Tinjau ulang
+  penilaian narasumber di menu Master &gt; AHP.";
+  stop
+else (tidak)
+  :Kembalikan null (Run AHP boleh dilanjutkan);
+  stop
 endif
 @enduml
   </pre>
 
-  <h3>4.2 Flowgraph</h3>
+  <h3>4.3 Flowgraph</h3>
   <pre class="plantuml">
 @startuml
-title Flowgraph - updateCriterionRank()
+title Flowgraph - expertWeightsBlocker()
 circle "1" as N1
 circle "2" as N2
 circle "3" as N3
@@ -341,55 +424,58 @@ circle "6" as N6
 circle "7" as N7
 circle "8" as N8
 circle "9" as N9
-circle "10" as N10
 N1 --> N2
-N2 --> N3 : target tidak ada
-N2 --> N4 : target ada
-N3 --> N10
-N4 --> N5 : rank sama
-N4 --> N6 : rank berbeda
-N5 --> N10
-N6 --> N7
-N7 --> N8 : occupant ada
-N7 --> N9 : occupant tidak ada
+N2 --> N3 : final &lt; min
+N2 --> N4 : final &gt;= min
+N3 --> N9
+N4 --> N5 : final &gt; max
+N4 --> N6 : final &lt;= max
+N5 --> N9
+N6 --> N7 : tidak konsisten
+N6 --> N8 : konsisten
+N7 --> N9
 N8 --> N9
-N9 --> N10
 @enduml
   </pre>
   <p style="font-size:12.5px;color:#52525b">
-    Node: 1 = ambil &amp; cari target · 2 = cek target ada · 3 = throw · 4 = cek rank sama ·
-    5 = return tanpa ubah · 6 = cari occupant &amp; set rank target · 7 = cek occupant ·
-    8 = set rank lama ke occupant · 9 = commit batch · 10 = selesai.
+    Node: 1 = terima parameter (baris 321–324) · 2 = uji jumlah &lt; min (325) ·
+    3 = return pesan minimal (326) · 4 = uji jumlah &gt; max (328) · 5 = return pesan maksimal (329) ·
+    6 = uji <code>combined.isConsistent</code> (331) · 7 = return pesan CR (332) ·
+    8 = return null (334) · 9 = selesai.
   </p>
 
-  <h3>4.3 Cyclomatic Complexity</h3>
+  <h3>4.4 Cyclomatic Complexity</h3>
   <table>
     <thead><tr><th>Komponen</th><th>Nilai</th><th>Perhitungan</th></tr></thead>
     <tbody>
-      <tr><td>Edge (E)</td><td>12</td><td>Jumlah panah pada flowgraph</td></tr>
-      <tr><td>Node (N)</td><td>10</td><td>Jumlah simpul pada flowgraph</td></tr>
-      <tr><td>Predikat</td><td>3</td><td>Node 2, 4, 7</td></tr>
-      <tr><td>V(G) = E − N + 2P</td><td>12 − 10 + 2 = <span class="cc">4</span></td><td>P = 1</td></tr>
+      <tr><td>Edge (E)</td><td>11</td><td>Jumlah panah pada flowgraph</td></tr>
+      <tr><td>Node (N)</td><td>9</td><td>Jumlah simpul pada flowgraph</td></tr>
+      <tr><td>Predikat</td><td>3</td><td>Node 2, 4, 6</td></tr>
+      <tr><td>V(G) = E − N + 2P</td><td>11 − 9 + 2 = <span class="cc">4</span></td><td>P = 1</td></tr>
       <tr><td>V(G) = Predikat + 1</td><td>3 + 1 = <span class="cc">4</span></td><td>Hasil konsisten</td></tr>
+      <tr><td>Jumlah Region (R)</td><td><span class="cc">4</span></td><td>3 region tertutup + 1 region luar (flowgraph planar)</td></tr>
     </tbody>
   </table>
 
-  <h3>4.4 Basis Path &amp; Test Case</h3>
+  <h3>4.5 Basis Path &amp; Test Case</h3>
   <table>
-    <thead><tr><th>Path</th><th>Jalur Node</th><th>Skenario</th><th>Data Uji</th><th>Hasil Diharapkan</th></tr></thead>
+    <thead><tr><th>Path</th><th>Jalur Node</th><th>Skenario</th><th>Data Uji</th><th>Hasil Diharapkan</th><th>Hasil Aktual</th></tr></thead>
     <tbody>
-      <tr><td>P1</td><td>1-2-3-10</td><td>Kriteria target tidak ada</td><td>key: "xxx"</td><td>Error "Kriteria tidak ditemukan"</td></tr>
-      <tr><td>P2</td><td>1-2-4-5-10</td><td>Rank baru = rank saat ini</td><td>energy rank 1 → 1</td><td>Tidak ada perubahan</td></tr>
-      <tr><td>P3</td><td>1-2-4-6-7-9-10</td><td>Rank baru belum dipakai</td><td>rank target → rank kosong</td><td>Rank target diperbarui</td></tr>
-      <tr><td>P4</td><td>1-2-4-6-7-8-9-10</td><td>Rank baru dipakai kriteria lain</td><td>cost rank 2 → 1</td><td>Rank energy &amp; cost ditukar</td></tr>
+      <tr><td>P1</td><td>1-2-3-9</td><td>Narasumber final kurang dari 2</td><td>1 narasumber final (CR &lt; 0,1)</td><td>"Run AHP ditolak: baru 1 narasumber berstatus final (minimal 2). Lengkapi penilaian di menu Master &gt; AHP."</td><td>Sesuai harapan — tercakup test <code>expertWeightsBlocker: too few final experts / inconsistent combination</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P2</td><td>1-2-4-5-9</td><td>Narasumber final lebih dari 3</td><td>4 narasumber final</td><td>"Run AHP ditolak: terdapat 4 narasumber final (maksimal 3). Hapus narasumber berlebih di menu Master &gt; AHP."</td><td><em>Belum tercakup test otomatis</em></td></tr>
+      <tr><td>P3</td><td>1-2-4-6-7-9</td><td>CR gabungan ≥ 0,1</td><td>2 narasumber final dengan KE–BL 2, KE–DO 4, KE–FM 1/8, BL–DO 2, BL–FM 4, DO–FM 2</td><td>"Run AHP ditolak: CR gabungan 1.097 ≥ 0.1. Tinjau ulang penilaian narasumber di menu Master &gt; AHP."</td><td>Sesuai harapan — tercakup test <code>expertWeightsBlocker: too few final experts / inconsistent combination</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
+      <tr><td>P4</td><td>1-2-4-6-8-9</td><td>Semua syarat terpenuhi</td><td>3 narasumber final, CR gabungan &lt; 0,1</td><td><code>null</code> (Run AHP boleh dilanjutkan)</td><td>Sesuai harapan — tercakup test <code>e. 3 valid experts → combined CR computed on the geometric-mean matrix</code> (npm test, 13 Okt 2026: 9/9 lulus)</td></tr>
     </tbody>
   </table>
 
   <p style="font-size:13px;color:#71717a;margin-top:30px">
     <strong>Kesimpulan:</strong> seluruh fungsi inti memiliki nilai cyclomatic complexity
-    pada rentang 2–5 (≤ 10), tergolong <strong>risiko rendah dan mudah diuji</strong>.
-    Jumlah basis path tiap fungsi (3, 2, 5, 4) telah seluruhnya tercakup oleh test case
-    di atas, sehingga setiap independent path pada modul telah teruji minimal satu kali.
+    pada rentang 2–7 (≤ 10), tergolong <strong>risiko rendah dan mudah diuji</strong>.
+    Jumlah basis path tiap fungsi adalah 3, 2, 7, dan 4, dan setiap path telah memiliki test case
+    di atas. Untuk Fungsi 3 dan 4, 9 dari 11 path tercakup test otomatis
+    (<code>tests/ahp.test.js</code>, dijalankan dengan <code>npm test</code>); path Fungsi 3-P1 dan
+    Fungsi 4-P2 belum tercakup test otomatis. Fungsi 1 dan 2 mengakses Firestore sehingga diuji secara
+    manual.
   </p>
 </div>
 </body>

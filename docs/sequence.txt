@@ -115,24 +115,46 @@ title Sequence Diagram - Jalankan Analisis AHP Bulanan
 actor "Admin" as U
 participant "Halaman Data Admin" as UI
 participant "ahpService" as SVC
+participant "ahpJudgmentService" as JSVC
+participant "lib/ahp.js" as LIB
 database "Firestore" as DB
 
 U -> UI : Pilih bulan & tekan Run AHP
 activate UI
 UI -> SVC : runAndSaveAHP(month, admin)
 activate SVC
-SVC -> DB : Ambil area, data energi & kriteria
+SVC -> JSVC : getAggregatedJudgments()
+activate JSVC
+JSVC -> DB : Ambil ahp_judgments_enerlyze
 activate DB
-DB --> SVC : Data masukan AHP
+DB --> JSVC : Penilaian narasumber
 deactivate DB
-alt Data seluruh area lengkap
-  SVC -> SVC : Hitung bobot, konsistensi & ranking
-  SVC -> DB : Simpan hasil AHP (id = bulan)
-  SVC --> UI : Hasil AHP
-  UI --> U : Tampilkan ranking & notifikasi berhasil
-else Data belum lengkap
-  SVC --> UI : Error "Data belum lengkap"
-  UI --> U : Tampilkan pesan kesalahan
+JSVC -> LIB : aggregateFinalJudgments(judgments, CRITERIA_CODES)
+LIB --> JSVC : { experts, combined } (rata-rata geometrik penilaian final)
+JSVC --> SVC : { experts, combined }
+deactivate JSVC
+SVC -> LIB : expertWeightsBlocker({ experts, combined })
+LIB --> SVC : Pesan penolakan / null
+alt Narasumber final < 2, > 3, atau CR gabungan >= 0,1
+  SVC --> UI : Error (code AHP_RUN_REJECTED)\n"Run AHP ditolak: ... di menu Master > AHP."
+  UI --> U : Tutup dialog & tampilkan pesan penolakan
+else Penilaian narasumber memenuhi syarat
+  SVC -> DB : Ambil area & data energi bulan tsb
+  activate DB
+  DB --> SVC : Data masukan AHP
+  deactivate DB
+  alt Data seluruh area lengkap
+    SVC -> LIB : runAHP({ criteria, criteriaMatrix: combined.matrix, areas, dataByArea })
+    LIB --> SVC : Bobot, konsistensi & ranking
+    SVC -> LIB : toAhpResultPayload(...)
+    LIB --> SVC : Payload (weight_source, experts, criteria_matrix, ...)
+    SVC -> DB : Simpan hasil AHP (id = bulan)
+    SVC --> UI : Hasil AHP
+    UI --> U : Tampilkan ranking & notifikasi berhasil
+  else Data belum lengkap
+    SVC --> UI : Error (code AHP_RUN_REJECTED)\n"Data belum lengkap di semua area untuk bulan ini."
+    UI --> U : Tutup dialog & tampilkan pesan kesalahan
+  end
 end
 deactivate SVC
 deactivate UI
@@ -157,7 +179,7 @@ deactivate DB
 SVC --> UI : Data laporan
 deactivate SVC
 alt Hasil AHP tersedia
-  UI --> U : Tampilkan laporan lengkap + rekomendasi
+  UI --> U : Tampilkan laporan lengkap + rekomendasi\n(+ "Disusun dari N narasumber" bila weight_source = expert_pairwise)
 else Hasil AHP belum ada
   UI --> U : Tampilkan data input mentah
 end
@@ -218,27 +240,50 @@ deactivate SVC
 deactivate UI
 @enduml
 
-' == Sequence: Kelola Kriteria AHP ==
+' == Sequence: Kelola Penilaian Narasumber AHP ==
 @startuml
-title Sequence Diagram - Kelola Kriteria AHP (Atur Rank)
+title Sequence Diagram - Kelola Penilaian Narasumber AHP
 actor "Admin" as U
 participant "Halaman Master AHP" as UI
-participant "criteriaService" as SVC
+participant "lib/ahp.js" as LIB
+participant "ahpJudgmentService" as SVC
 database "Firestore" as DB
 
-U -> UI : Pilih kriteria & tentukan rank baru
+U -> UI : Tambah / Edit narasumber,\nisi nama, jabatan & 6 perbandingan
 activate UI
-UI -> SVC : updateCriterionRank(key, rankBaru)
+UI -> LIB : analyzeJudgment(CRITERIA_CODES, pairs)
+LIB --> UI : Matriks, bobot, lambda max, CI, CR
+opt CR >= 0,1
+  UI -> LIB : inconsistentPairs(matrix, weights, CRITERIA_CODES)
+  LIB --> UI : Pasangan paling tidak konsisten
+  UI --> U : Peringatan + 2 pasangan terburuk,\n"Simpan final" nonaktif
+end
+U -> UI : Simpan draft / Simpan final
+UI -> SVC : createJudgment(form, user) / updateJudgment(id, form, user)
 activate SVC
-SVC -> DB : Ambil daftar kriteria saat ini
-activate DB
-DB --> SVC : Empat kriteria
-deactivate DB
-SVC -> SVC : Tukar rank dengan kriteria pemilik rank
-SVC -> DB : Simpan perubahan rank
-SVC --> UI : Berhasil
-UI --> U : Notifikasi & muat ulang tabel kriteria
+SVC -> LIB : toJudgmentFields(form, CRITERIA_CODES)
+LIB --> SVC : Field tervalidasi (matrix, weights, lambda_max, ci, cr, status)
+alt Valid (nama & jabatan terisi, final hanya bila CR < 0,1, maks 3 narasumber)
+  SVC -> DB : Simpan dokumen ahp_judgments_enerlyze
+  activate DB
+  DB --> SVC : Status operasi
+  deactivate DB
+  SVC --> UI : Berhasil
+  UI --> U : Notifikasi & muat ulang daftar + Hasil Gabungan
+else Ditolak
+  SVC --> UI : Error (mis. "CR ... ≥ 0.1: penilaian hanya dapat\ndisimpan sebagai draft." / "Maksimal 3 narasumber. ...")
+  UI --> U : Tampilkan pesan kesalahan
+end
 deactivate SVC
+opt Hapus narasumber
+  U -> UI : Hapus & konfirmasi
+  UI -> SVC : deleteJudgment(id)
+  activate SVC
+  SVC -> DB : Hapus dokumen penilaian
+  SVC --> UI : Berhasil
+  deactivate SVC
+  UI --> U : Notifikasi & muat ulang Hasil Gabungan
+end
 deactivate UI
 @enduml
 

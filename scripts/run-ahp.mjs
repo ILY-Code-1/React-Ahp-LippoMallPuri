@@ -1,13 +1,15 @@
 /**
  * Run AHP for the last 3 completed months and persist results to Firestore.
  *
- *   npm run ahp           → runs Feb, Mar, Apr (last 3 completed months)
+ *   npm run ahp           → runs the last 3 completed months
  *   npm run ahp -- 2026-02 → runs only the given month(s)
  *
  * Mirrors src/services/ahpService.runAndSaveAHP but uses a Node-initialized
  * Firebase (the app's config module reads import.meta.env, unavailable here).
- * The criteria pairwise matrix is persisted via serializeMatrix() so Firestore
- * never receives a nested array.
+ * All AHP logic comes from src/lib/ahp.js:
+ *   - criteria weights from the FINAL expert judgments in `ahp_judgments_enerlyze`
+ *     (geometric mean), refused when < MIN_EXPERTS or combined CR ≥ 0.1;
+ *   - the stored payload is built by toAhpResultPayload() (Firestore-safe matrix).
  *
  * It overwrites any existing result for a month (deletes first, then writes).
  */
@@ -19,8 +21,10 @@ import {
 } from 'firebase/firestore'
 import { decryptConfig } from '../src/lib/crypto.js'
 import { COLLECTIONS } from '../src/constants/collections.js'
-import { CRITERIA } from '../src/constants/criteria.js'
-import { runAHP, serializeMatrix } from '../src/lib/ahp.js'
+import { CRITERIA, CRITERIA_CODES } from '../src/constants/criteria.js'
+import {
+  runAHP, aggregateFinalJudgments, expertWeightsBlocker, toAhpResultPayload,
+} from '../src/lib/ahp.js'
 import { prevMonthKey, monthKeyRange, formatMonthKey } from '../src/lib/format.js'
 
 const readSecret = () => {
@@ -50,23 +54,25 @@ const main = async () => {
     ? process.argv.slice(2)
     : monthKeyRange(prevMonthKey(), 3)
 
-  /* Criteria — hydrate stored docs with in-code meta (higherIsWorse, etc.). */
-  const critSnap = await getDocs(collection(db, COLLECTIONS.CRITERIA))
-  const criteria = critSnap.empty
-    ? CRITERIA.map((c) => ({ key: c.key, code: c.code, name: c.name, rank: c.defaultRank, higherIsWorse: c.higherIsWorse }))
-    : critSnap.docs
-        .map((d) => {
-          const stored = { id: d.id, ...d.data() }
-          const meta = CRITERIA.find((c) => c.key === stored.key)
-          return { ...meta, ...stored }
-        })
-        .sort((a, b) => a.rank - b.rank)
+  /* Criteria weights — final expert judgments, combined by geometric mean. */
+  const judgSnap = await getDocs(collection(db, COLLECTIONS.AHP_JUDGMENTS))
+  const judgments = judgSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const aggregate = aggregateFinalJudgments(judgments, CRITERIA_CODES)
+  const blocker = expertWeightsBlocker(aggregate)
+  if (blocker) {
+    console.error(`✗ ${blocker}`)
+    process.exit(1)
+  }
 
-  /* Areas. */
+  /* Areas — sorted by name, like areaService.getAreas() (same tie-break as the app). */
   const areaSnap = await getDocs(collection(db, COLLECTIONS.AREAS))
-  const areas = areaSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const areas = areaSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
-  console.log(`→ Kriteria: ${criteria.length} · Area: ${areas.length}`)
+  console.log(
+    `→ Narasumber final: ${aggregate.experts.length} · CR gabungan: ${aggregate.combined.cr.toFixed(4)} · Area: ${areas.length}`,
+  )
   console.log(`→ Menjalankan AHP untuk: ${months.map(formatMonthKey).join(', ')}\n`)
 
   let ok = 0
@@ -85,27 +91,28 @@ const main = async () => {
 
     const dataByArea = {}
     for (const row of data) dataByArea[row.area_id] = row
-    const result = runAHP({ criteria, areas, dataByArea })
+    const result = runAHP({
+      criteria: CRITERIA,
+      criteriaMatrix: aggregate.combined.matrix,
+      areas,
+      dataByArea,
+    })
 
-    const payload = {
+    const payload = toAhpResultPayload({
       month,
-      ahp_id: ahpIdOf(month),
-      criteria: result.criteria,
-      criteria_matrix: serializeMatrix(result.criteriaMatrix), // Firestore-safe
-      criteria_weights: result.criteriaWeights,
-      consistency: result.consistency,
-      ranking: result.ranking,
-      created_by: 'Seed Script',
-      created_at: serverTimestamp(),
-    }
+      ahpId: ahpIdOf(month),
+      experts: aggregate.experts,
+      result,
+      createdBy: 'Seed Script',
+      createdAt: serverTimestamp(),
+    })
 
     // Overwrite cleanly: drop any half-written doc, then write fresh.
     await deleteDoc(doc(db, COLLECTIONS.AHP_RESULTS, month)).catch(() => {})
     await setDoc(doc(db, COLLECTIONS.AHP_RESULTS, month), payload)
     ok++
 
-    const cr = result.consistency.cr
-    console.log(`  ✓ [OK] ${month} (${ahpIdOf(month)}) — setDoc berhasil. CR=${cr.toFixed(4)} ${result.consistency.isConsistent ? '(konsisten)' : '(PERLU TINJAU)'}`)
+    console.log(`  ✓ [OK] ${month} (${ahpIdOf(month)}) — setDoc berhasil. CR=${result.consistency.cr.toFixed(4)}`)
     result.ranking.forEach((r) => {
       console.log(`        #${r.rank} ${String(r.area_name).padEnd(14)} skor=${r.score.toFixed(4)}`)
     })

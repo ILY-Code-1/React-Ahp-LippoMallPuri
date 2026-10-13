@@ -85,6 +85,18 @@ export const parseNumber = (str) => {
   return Number(String(str).replace(/[^\d.-]/g, '')) || 0
 }
 
+/**
+ * A pairwise-matrix value: whole Saaty values as "3" / "1/5", non-integers
+ * (e.g. a geometric mean of several experts) as decimals "2.47" / "0.41".
+ */
+export const formatSaaty = (v, digits = 2) => {
+  if (!(v > 0)) return '-'
+  if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v))
+  const inv = 1 / v
+  if (Math.abs(inv - Math.round(inv)) < 1e-6) return `1/${Math.round(inv)}`
+  return v.toFixed(digits)
+}
+
 /** Format a Firestore Timestamp / Date / ISO string as "02 Mei 2026 · 09:42 WIB". */
 export const formatTimestamp = (value) => {
   if (!value) return '-'

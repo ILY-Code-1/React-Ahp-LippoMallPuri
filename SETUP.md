@@ -92,7 +92,9 @@ npm run seed -- admin@lippomall.com "Administrator" PasswordKuat123
 
 Script ini:
 
-- Mengisi **4 kriteria AHP** ke `criteria_enerlyze` (rank default 1–4).
+- Mengisi **4 kriteria AHP** ke `criteria_enerlyze` (rank default 1–4). Koleksi ini
+  kini **legacy**: aplikasi tidak lagi membaca `rank`; bobot kriteria berasal dari
+  penilaian narasumber di Master ▸ AHP.
 - Membuat **user admin pertama** di `users_enerlyze` (password sudah di-hash).
 
 > Jika lebih suka manual, lihat **Lampiran A** di bawah.
@@ -135,6 +137,9 @@ npm run preview
 - [ ] Publish `firestore.rules` di Firebase Console.
 - [ ] Login sebagai admin → buat **User staff**, **Area**, lalu assign area ke staff.
 - [ ] Staff login → input data energi bulanan.
+- [ ] Admin → **Master ▸ AHP** → input penilaian **minimal 2 narasumber** (maks 3) dan
+      simpan sebagai **final** (hanya bisa bila CR < 0,1); pastikan panel Hasil Gabungan
+      menunjukkan "Siap untuk Run AHP".
 - [ ] Admin → **Run AHP** setelah semua area terisi, lalu **View Detail**.
 
 ---
@@ -143,11 +148,13 @@ npm run preview
 
 Jika tidak memakai `npm run seed`:
 
-### A.1 Kriteria (`criteria_enerlyze`)
+### A.1 Kriteria (`criteria_enerlyze`) — legacy
 
-Buat 4 dokumen, **Document ID = key**:
+Koleksi ini tidak lagi dibaca aplikasi (kriteria tetap ada di `src/constants/criteria.js`),
+jadi langkah ini opsional. Bila tetap ingin dibuat, buat 4 dokumen, **Document ID = key**
+(kolom `rank` adalah legacy dan tidak dipakai untuk bobot):
 
-| Document ID   | key           | code | name                       | rank |
+| Document ID   | key           | code | name                       | rank (legacy) |
 | ------------- | ------------- | ---- | -------------------------- | ---- |
 | `energy`      | `energy`      | `KE` | Konsumsi Energi (kWh)      | 1    |
 | `cost`        | `cost`        | `BL` | Biaya Listrik (Rp)         | 2    |

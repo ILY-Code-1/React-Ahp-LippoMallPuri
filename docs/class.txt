@@ -27,10 +27,31 @@ class Criteria {
   - key : String
   - code : String
   - name : String
-  - rank : Integer
   - higherIsWorse : Boolean
+}
+
+class ExpertJudgment {
+  - id : String
+  - expert_name : String
+  - expert_position : String
+  - criteria_codes : String[]
+  - matrix : Map
+  - weights : Number[]
+  - lambda_max : Number
+  - ci : Number
+  - cr : Number
+  - status : String
+  - created_by : String
+  - created_at : DateTime
+  - updated_at : DateTime
   --
-  + saatyIntensity(other : Criteria) : Number
+  + isConsistent() : Boolean
+}
+
+class PairwiseComparison {
+  - a : String
+  - b : String
+  - value : Number
 }
 
 class EnergyData {
@@ -50,6 +71,8 @@ class EnergyData {
 class AhpResult {
   - month : String
   - ahp_id : String
+  - weight_source : String
+  - experts : List
   - lambdaMax : Number
   - ci : Number
   - cr : Number
@@ -61,7 +84,6 @@ class AhpResult {
 }
 
 class AhpResultCriteria {
-  - rank : Integer
   - weight : Number
 }
 
@@ -92,5 +114,10 @@ AhpResult "1" *-- "4" AhpResultCriteria : bobot kriteria
 Criteria "1" --> "0..*" AhpResultCriteria : dinilai pada >
 Area "1" --> "0..*" AhpRanking : diperingkat pada >
 EnergyData "1..*" --o "1" AhpResult : sumber perhitungan
+
+User "1" --> "0..*" ExpertJudgment : menyusun >
+ExpertJudgment "1" *-- "6" PairwiseComparison : pairs
+PairwiseComparison "0..*" --> "2" Criteria : membandingkan >
+AhpResult "0..*" ..> "2..3" ExpertJudgment : bobot dari (snapshot experts) >
 
 @enduml

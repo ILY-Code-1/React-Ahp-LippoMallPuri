@@ -136,13 +136,13 @@
       <tr><td class="uc" colspan="8">UC-05 · Jalankan Analisis AHP</td></tr>
       <tr>
         <td>9</td>
-        <td>Jalankan AHP saat data lengkap</td>
-        <td>1. Buka Data Admin. 2. Pilih bulan dengan semua area terisi. 3. Klik Run AHP &amp; konfirmasi.</td>
-        <td>Bulan: 2026-04 · semua area terisi</td>
-        <td>AHP dihitung &amp; tersimpan, ranking prioritas tampil.</td>
-        <td>Ranking &amp; skor AHP tampil.</td>
-        <td class="status ok">Valid</td>
-        <td>Sesuai harapan.</td>
+        <td>Jalankan AHP saat data lengkap &amp; narasumber memenuhi syarat</td>
+        <td>1. Pastikan di Master AHP panel Hasil Gabungan berstatus "Siap untuk Run AHP". 2. Buka Data Admin. 3. Pilih bulan dengan semua area terisi. 4. Klik Run AHP &amp; konfirmasi.</td>
+        <td>Bulan: 2026-05 · semua area terisi · 2 narasumber final, CR gabungan 0,0022</td>
+        <td>Muncul notifikasi "AHP berhasil dijalankan untuk Mei 2026."; ranking prioritas tampil; hasil tersimpan dengan bobot dari narasumber.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
       </tr>
       <tr>
         <td>10</td>
@@ -154,20 +154,50 @@
         <td class="status ok">Valid</td>
         <td>Sesuai harapan.</td>
       </tr>
-
-      <tr><td class="uc" colspan="8">UC-06 · Lihat Laporan Detail AHP</td></tr>
       <tr>
         <td>11</td>
-        <td>Buka laporan bulan yang sudah di-AHP</td>
-        <td>1. Buka Data Admin. 2. Klik View Detail pada bulan ber-hasil AHP.</td>
-        <td>Bulan: 2026-04</td>
-        <td>Laporan lengkap tampil: ranking, pairwise matrix, rekomendasi.</td>
-        <td>Laporan lengkap tampil di tab baru.</td>
-        <td class="status ok">Valid</td>
-        <td>Sesuai harapan.</td>
+        <td>Jalankan AHP saat narasumber final kurang dari 2</td>
+        <td>1. Di Master AHP, pastikan hanya 1 narasumber berstatus Final (lainnya Draft). 2. Buka Data Admin, pilih bulan dengan semua area terisi. 3. Klik Run AHP &amp; konfirmasi.</td>
+        <td>1 narasumber final · bulan dengan semua area terisi</td>
+        <td>Dialog tertutup, muncul pesan "Run AHP ditolak: baru 1 narasumber berstatus final (minimal 2). Lengkapi penilaian di menu Master &gt; AHP."; hasil AHP tidak tersimpan.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
       </tr>
       <tr>
         <td>12</td>
+        <td>Jalankan AHP saat CR gabungan ≥ 0,1</td>
+        <td>1. Siapkan narasumber final yang penilaiannya saling bertolak belakang. 2. Buka Data Admin, pilih bulan dengan semua area terisi. 3. Klik Run AHP &amp; konfirmasi.</td>
+        <td>≥ 2 narasumber final dengan CR gabungan ≥ 0,1</td>
+        <td>Dialog tertutup, muncul pesan "Run AHP ditolak: CR gabungan x ≥ 0.1. Tinjau ulang penilaian narasumber di menu Master &gt; AHP." (x = CR gabungan, 3 desimal); hasil AHP tidak tersimpan.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Kemungkinan sulit direproduksi lewat UI: setiap narasumber final wajib CR &lt; 0,1 dan rata-rata geometrik cenderung menjaga konsistensi. Jalur ini tercakup test otomatis (white box Fungsi 4-P3).</td>
+      </tr>
+
+      <tr><td class="uc" colspan="8">UC-06 · Lihat Laporan Detail AHP</td></tr>
+      <tr>
+        <td>13</td>
+        <td>Buka laporan hasil AHP berbasis narasumber</td>
+        <td>1. Buka Data Admin. 2. Pilih bulan yang di-AHP setelah fitur narasumber. 3. Klik View Detail.</td>
+        <td>Bulan: 2026-05 (2 narasumber)</td>
+        <td>Laporan lengkap tampil (ranking, pairwise matrix, rekomendasi). Subjudul bagian 03 berbunyi "Skala Saaty 1–9 · Disusun dari 2 narasumber (rata-rata geometrik)"; matriks berisi nilai desimal (mis. 3.46, 0.29) di samping bilangan bulat/pecahan (mis. 2, 1/2).</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>14</td>
+        <td>Buka laporan lama (sebelum fitur narasumber)</td>
+        <td>1. Buka Data Admin. 2. Pilih bulan yang hasil AHP-nya dibuat sebelum fitur narasumber. 3. Klik View Detail.</td>
+        <td>Hasil AHP lama tanpa <code>weight_source</code> (mis. 2026-04)</td>
+        <td>Laporan tampil seperti sebelumnya: subjudul bagian 03 hanya "Skala Saaty 1–9", tanpa keterangan narasumber; matriks berisi bilangan bulat/pecahan (1, 3, 1/3, …).</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual; pastikan bulan uji memang punya hasil lama.</td>
+      </tr>
+      <tr>
+        <td>15</td>
         <td>Buka laporan bulan tanpa hasil AHP</td>
         <td>1. Klik View Detail pada bulan yang AHP-nya belum dijalankan.</td>
         <td>Bulan: 2026-05</td>
@@ -179,7 +209,7 @@
 
       <tr><td class="uc" colspan="8">UC-07 · Kelola Master User</td></tr>
       <tr>
-        <td>13</td>
+        <td>16</td>
         <td>Tambah user baru</td>
         <td>1. Buka Master User. 2. Klik Tambah User. 3. Isi form. 4. Simpan.</td>
         <td>Nama: Budi Santoso · Role: staff<br>password: <code>Staff2026@</code></td>
@@ -189,7 +219,7 @@
         <td>Sesuai harapan.</td>
       </tr>
       <tr>
-        <td>14</td>
+        <td>17</td>
         <td>Hapus user yang masih memegang area</td>
         <td>1. Buka Master User. 2. Klik Hapus pada user penanggung jawab area. 3. Konfirmasi.</td>
         <td>User: Andi Pratama (PJ Lantai 1)</td>
@@ -201,7 +231,7 @@
 
       <tr><td class="uc" colspan="8">UC-08 · Kelola Master Area</td></tr>
       <tr>
-        <td>15</td>
+        <td>18</td>
         <td>Tambah area baru</td>
         <td>1. Buka Master Area. 2. Klik Tambah Area. 3. Isi nama, deskripsi, PJ. 4. Simpan.</td>
         <td>Nama: Lantai 2 · PJ: Budi Santoso</td>
@@ -211,7 +241,7 @@
         <td>Sesuai harapan.</td>
       </tr>
       <tr>
-        <td>16</td>
+        <td>19</td>
         <td>Tambah area tanpa penanggung jawab</td>
         <td>1. Klik Tambah Area. 2. Isi nama saja, kosongkan PJ. 3. Simpan.</td>
         <td>Nama: Atrium · PJ: (kosong)</td>
@@ -221,31 +251,91 @@
         <td>Sesuai harapan.</td>
       </tr>
 
-      <tr><td class="uc" colspan="8">UC-09 · Kelola Kriteria AHP</td></tr>
+      <tr><td class="uc" colspan="8">UC-09 · Kelola Penilaian Narasumber AHP</td></tr>
       <tr>
-        <td>17</td>
-        <td>Ubah rank kriteria</td>
-        <td>1. Buka Master AHP. 2. Klik Edit pada kriteria Biaya Listrik. 3. Pilih Rank 1. 4. Simpan.</td>
-        <td>Kriteria: Biaya Listrik · Rank baru: 1</td>
-        <td>Rank diperbarui, kriteria pemilik rank 1 sebelumnya ditukar otomatis.</td>
-        <td>Rank tertukar, tabel diperbarui.</td>
-        <td class="status ok">Valid</td>
-        <td>Sesuai harapan.</td>
+        <td>20</td>
+        <td>Tambah narasumber tanpa nama/jabatan</td>
+        <td>1. Buka Master AHP. 2. Klik "Tambah Narasumber". 3. Kosongkan Nama Narasumber &amp; Jabatan. 4. Klik "Simpan draft".</td>
+        <td>Nama: (kosong) · Jabatan: (kosong)</td>
+        <td>Penyimpanan ditolak; di bawah field muncul "Nama narasumber wajib diisi." dan "Jabatan wajib diisi.".</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
       </tr>
       <tr>
-        <td>18</td>
-        <td>Ubah rank ke nilai yang sama</td>
-        <td>1. Klik Edit kriteria. 2. Pilih rank yang sama dengan rank saat ini. 3. Simpan.</td>
-        <td>Kriteria: Konsumsi Energi · Rank: 1 → 1</td>
-        <td>Sistem tidak melakukan perubahan, tabel tetap konsisten.</td>
-        <td>Tidak ada perubahan rank.</td>
-        <td class="status ok">Valid</td>
-        <td>Sesuai harapan.</td>
+        <td>21</td>
+        <td>Tambah narasumber dengan penilaian konsisten lalu simpan final</td>
+        <td>1. Klik "Tambah Narasumber". 2. Isi nama &amp; jabatan. 3. Isi 6 perbandingan sesuai data uji. 4. Amati CR. 5. Klik "Simpan final".</td>
+        <td>KE vs BL: 2 (KE) · KE vs DO: 4 (KE) · KE vs FM: 6 (KE) · BL vs DO: 2 (BL) · BL vs FM: 4 (BL) · DO vs FM: 2 (DO)</td>
+        <td>Matriks, bobot, λ max, CI tampil langsung; CR 0.0038 (hijau); "Simpan final" aktif. Muncul notifikasi "Penilaian disimpan sebagai final."; tabel menampilkan status Final, CR 0.004.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>22</td>
+        <td>Isi penilaian tidak konsisten (CR ≥ 0,1)</td>
+        <td>1. Klik "Tambah Narasumber". 2. Isi nama &amp; jabatan. 3. Isi 6 perbandingan sesuai data uji. 4. Amati peringatan &amp; tombol.</td>
+        <td>KE vs BL: 2 (KE) · KE vs DO: 4 (KE) · KE vs FM: 8 (FM) · BL vs DO: 2 (BL) · BL vs FM: 4 (BL) · DO vs FM: 2 (DO)</td>
+        <td>Muncul peringatan "CR 1.097 ≥ 0.1: penilaian belum konsisten" dan "Hanya dapat disimpan sebagai draft."; 2 pasangan terburuk: "KE vs FM: saat ini 1/8, yang selaras dengan bobot ≈ 1" dan "BL vs FM: saat ini 4, … ≈ 1"; tombol "Simpan final" nonaktif.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>23</td>
+        <td>Simpan penilaian tidak konsisten sebagai draft</td>
+        <td>Lanjutan kasus sebelumnya: klik "Simpan draft".</td>
+        <td>Penilaian dengan CR 1.0974</td>
+        <td>Muncul notifikasi "Penilaian disimpan sebagai draft."; tabel menampilkan status Draft dengan CR berwarna kuning; draft tidak dihitung di Hasil Gabungan.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>24</td>
+        <td>Ubah penilaian draft menjadi final</td>
+        <td>1. Klik "Edit" pada narasumber Draft. 2. Ubah KE vs FM menjadi 6 (KE). 3. Klik "Simpan final".</td>
+        <td>KE vs FM: 8 (FM) → 6 (KE)</td>
+        <td>CR turun menjadi 0.0038 dan "Simpan final" aktif; muncul "Penilaian disimpan sebagai final."; status berubah menjadi Final.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>25</td>
+        <td>Hapus narasumber</td>
+        <td>1. Klik "Hapus" pada salah satu narasumber. 2. Pada dialog "Hapus Narasumber", klik "Hapus".</td>
+        <td>Salah satu narasumber</td>
+        <td>Muncul notifikasi "Narasumber dihapus."; daftar &amp; Hasil Gabungan diperbarui; hasil AHP yang sudah tersimpan tidak berubah.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>26</td>
+        <td>Batas maksimal 3 narasumber</td>
+        <td>1. Pastikan sudah ada 3 narasumber (Draft/Final). 2. Amati tombol "Tambah Narasumber".</td>
+        <td>3 narasumber terdaftar</td>
+        <td>Tombol "Tambah Narasumber" nonaktif dengan keterangan "Maksimal 3 narasumber".</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>27</td>
+        <td>Status Hasil Gabungan mengikuti jumlah narasumber final</td>
+        <td>1. Buka Master AHP dengan 1 narasumber final; amati panel Hasil Gabungan. 2. Jadikan narasumber kedua Final; amati kembali.</td>
+        <td>1 lalu 2 narasumber final</td>
+        <td>Saat 1 final: label "Belum dapat Run AHP" dan pesan "Run AHP ditolak: baru 1 narasumber berstatus final (minimal 2). …". Saat 2 final (CR gabungan &lt; 0,1): label "Siap untuk Run AHP" dengan matriks gabungan, λ max, CI, CR, dan bobot.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
       </tr>
 
       <tr><td class="uc" colspan="8">UC-10 · Kelola Notifikasi</td></tr>
       <tr>
-        <td>19</td>
+        <td>28</td>
         <td>Buka notifikasi &amp; navigasi</td>
         <td>1. Klik ikon lonceng. 2. Klik salah satu notifikasi.</td>
         <td>Notifikasi "missing-data" → /dashboard/data</td>
@@ -255,7 +345,7 @@
         <td>Sesuai harapan.</td>
       </tr>
       <tr>
-        <td>20</td>
+        <td>29</td>
         <td>Tandai semua notifikasi terbaca</td>
         <td>1. Klik ikon lonceng. 2. Klik "Tandai semua terbaca".</td>
         <td>3 notifikasi aktif</td>
@@ -267,17 +357,27 @@
 
       <tr><td class="uc" colspan="8">UC-11 · Unduh Laporan PDF</td></tr>
       <tr>
-        <td>21</td>
-        <td>Unduh laporan AHP ke PDF</td>
+        <td>30</td>
+        <td>Unduh laporan AHP berbasis narasumber ke PDF</td>
         <td>1. Buka Laporan Detail AHP. 2. Klik tombol "Unduh PDF".</td>
-        <td>Laporan AHP-2026-04</td>
-        <td>Berkas <code>Laporan-AHP-2026-04.pdf</code> terunduh ke perangkat.</td>
-        <td>PDF berhasil diunduh.</td>
-        <td class="status ok">Valid</td>
-        <td>Sesuai harapan.</td>
+        <td>Laporan AHP-2026-05</td>
+        <td>Berkas <code>Laporan-AHP-2026-05.pdf</code> terunduh; isinya memuat keterangan "Disusun dari 2 narasumber (rata-rata geometrik)" dan matriks desimal seperti di layar.</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
       </tr>
       <tr>
-        <td>22</td>
+        <td>31</td>
+        <td>Unduh laporan lama ke PDF</td>
+        <td>1. Buka Laporan Detail AHP untuk hasil lama. 2. Klik tombol "Unduh PDF".</td>
+        <td>Laporan lama, mis. AHP-2026-04</td>
+        <td>Berkas <code>Laporan-AHP-2026-04.pdf</code> terunduh dengan tampilan seperti sebelumnya (tanpa keterangan narasumber).</td>
+        <td>Belum diuji</td>
+        <td class="status">—</td>
+        <td>Diisi setelah uji manual.</td>
+      </tr>
+      <tr>
+        <td>32</td>
         <td>Unduh PDF saat konten gagal dirender</td>
         <td>1. Buka laporan. 2. Klik Unduh PDF saat proses render gagal.</td>
         <td>Simulasi kegagalan render</td>
@@ -289,7 +389,7 @@
 
       <tr><td class="uc" colspan="8">UC-12 · Hapus Hasil AHP</td></tr>
       <tr>
-        <td>23</td>
+        <td>33</td>
         <td>Hapus hasil AHP suatu bulan</td>
         <td>1. Buka Laporan Detail AHP. 2. Klik "Hapus Laporan". 3. Konfirmasi.</td>
         <td>Laporan AHP-2026-04</td>
@@ -299,7 +399,7 @@
         <td>Sesuai harapan.</td>
       </tr>
       <tr>
-        <td>24</td>
+        <td>34</td>
         <td>Batalkan penghapusan hasil AHP</td>
         <td>1. Klik "Hapus Laporan". 2. Pada dialog konfirmasi, klik Batal.</td>
         <td>Laporan AHP-2026-04</td>
@@ -312,9 +412,10 @@
   </table>
 
   <p style="font-size:13px;color:#71717a;margin-top:24px">
-    <strong>Kesimpulan:</strong> 24 skenario pengujian black box pada 12 fitur Enerlyze
-    seluruhnya menghasilkan status <span class="ok">Valid</span> — perilaku aplikasi
-    sesuai dengan hasil yang diharapkan, baik pada skenario sukses maupun skenario gagal.
+    <strong>Kesimpulan:</strong> terdapat 34 skenario pengujian black box pada 12 fitur Enerlyze.
+    Sebanyak 19 skenario berstatus <span class="ok">Valid</span> dari pengujian sebelumnya. 15 skenario
+    terkait penilaian narasumber (UC-05, UC-06, UC-09, UC-11) belum diuji dan akan diisi setelah
+    pengujian manual.
   </p>
 </div>
 </body>

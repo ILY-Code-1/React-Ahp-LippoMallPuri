@@ -8,10 +8,10 @@ import { getAhpResult, deleteAhpResult, ahpIdOf } from '../../services/ahpServic
 import { getAreas } from '../../services/areaService'
 import { getDataByMonth } from '../../services/dataService'
 import { buildRecommendation } from '../../lib/recommendations'
-import { deserializeMatrix } from '../../lib/ahp'
+import { deserializeMatrix, buildCriteriaMatrix, WEIGHT_SOURCE_EXPERT } from '../../lib/ahp'
 import {
   formatMonthKey, formatMonthRange, formatTimestamp, daysInMonthKey,
-  formatNumber, formatRupiah,
+  formatNumber, formatRupiah, formatSaaty,
 } from '../../lib/format'
 import { toast } from '../../stores/toastStore'
 
@@ -19,12 +19,6 @@ import { toast } from '../../stores/toastStore'
 const CRIT_SHADE = { cost: '#18181b', energy: '#52525b', duration: '#a1a1aa', maintenance: '#d4d4d8' }
 const CRIT_LABEL = { cost: 'Biaya', energy: 'Energi', duration: 'Efisiensi', maintenance: 'Perawatan' }
 const LEGEND = ['cost', 'energy', 'duration', 'maintenance']
-
-/** A Saaty matrix value rendered as an integer or a 1/x fraction. */
-const saatyLabel = (v) => {
-  if (v >= 1) return String(Math.round(v))
-  return `1/${Math.round(1 / v)}`
-}
 
 const DetailReportPage = () => {
   const { month } = useParams()
@@ -185,8 +179,13 @@ const FullReport = ({ ahp, month }) => {
   const maxScore = Math.max(...ranking.map((r) => r.score), 0.0001)
   const cr = ahp.consistency?.cr ?? 0
   const crOk = cr < 0.1
-  // Firestore-safe matrix is stored as { rows: [{ cells: [...] }] }.
-  const matrix = deserializeMatrix(ahp.criteria_matrix)
+  // Firestore-safe matrix is stored as { rows: [{ cells: [...] }] }. Very old
+  // rank-based results without a stored matrix are rebuilt from their ranks.
+  const stored = deserializeMatrix(ahp.criteria_matrix)
+  const canRebuild = !stored.length && ahp.criteria?.every((c) => c.rank)
+  const matrix = canRebuild ? buildCriteriaMatrix(ahp.criteria) : stored
+  const fromExperts = ahp.weight_source === WEIGHT_SOURCE_EXPERT
+  const expertCount = ahp.experts?.length || 0
 
   return (
     <>
@@ -244,7 +243,15 @@ const FullReport = ({ ahp, month }) => {
       <div style={{ display: 'flex', gap: 40, marginTop: 48, flexWrap: 'wrap' }}>
         {/* 03 Pairwise Matrix */}
         <div style={{ flex: '1 1 320px' }}>
-          <SectionTitle no="03" title="Pairwise Matrix" sub="Skala Saaty 1–9" />
+          <SectionTitle
+            no="03"
+            title="Pairwise Matrix"
+            sub={
+              fromExperts
+                ? `Skala Saaty 1–9 · Disusun dari ${expertCount} narasumber (rata-rata geometrik)`
+                : 'Skala Saaty 1–9'
+            }
+          />
           <table style={S.matrix}>
             <thead>
               <tr>
@@ -260,7 +267,7 @@ const FullReport = ({ ahp, month }) => {
                   <th style={S.matrixHead}>{rowC.code}</th>
                   {ahp.criteria.map((_, j) => (
                     <td key={j} style={{ ...S.matrixCell, ...(i === j ? S.matrixDiag : {}) }}>
-                      {saatyLabel(matrix[i][j])}
+                      {formatSaaty(matrix[i]?.[j])}
                     </td>
                   ))}
                 </tr>

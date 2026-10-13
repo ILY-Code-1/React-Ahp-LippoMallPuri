@@ -8,5 +8,6 @@ export const COLLECTIONS = {
   CRITERIA: 'criteria_enerlyze',
   DATA: 'data_enerlyze',
   AHP_RESULTS: 'ahp_results_enerlyze',
+  AHP_JUDGMENTS: 'ahp_judgments_enerlyze',
   NOTIFICATIONS: 'notifications_enerlyze',
 }

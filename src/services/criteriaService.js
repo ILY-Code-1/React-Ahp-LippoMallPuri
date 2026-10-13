@@ -5,6 +5,12 @@ import { db } from '../config/firebase'
 import { COLLECTIONS } from '../constants/collections'
 import { CRITERIA } from '../constants/criteria'
 
+/*
+ * LEGACY. Criteria ranks no longer drive the AHP weights — those come from
+ * expert pairwise judgments (see ahpJudgmentService). Nothing in the app calls
+ * these functions anymore; they are kept (and `criteria_enerlyze` is left
+ * untouched) only for old data / `npm run seed`.
+ */
 const col = collection(db, COLLECTIONS.CRITERIA)
 
 /** Merge a stored criterion doc with its fixed metadata from constants. */
@@ -14,6 +20,7 @@ const hydrate = (stored) => {
 }
 
 /**
+ * @deprecated Use CRITERIA from constants/criteria; weights come from experts.
  * Fetch the four AHP criteria, ordered by rank.
  * Falls back to the in-code defaults if the collection has not been seeded.
  */
@@ -44,6 +51,7 @@ export const seedCriteria = async () => {
 }
 
 /**
+ * @deprecated Ranks are no longer used for the AHP weights.
  * Edit a criterion's rank. Ranks must stay unique (1–4), so the criterion that
  * currently holds `newRank` is swapped into the editing criterion's old rank.
  */

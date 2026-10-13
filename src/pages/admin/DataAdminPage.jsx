@@ -8,7 +8,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import useAuthStore from '../../stores/authStore'
 import { getAreas } from '../../services/areaService'
 import { getDataByMonth } from '../../services/dataService'
-import { getAhpResult, runAndSaveAHP } from '../../services/ahpService'
+import { getAhpResult, runAndSaveAHP, AHP_RUN_REJECTED } from '../../services/ahpService'
 import { generateNotifications } from '../../services/notificationService'
 import { formatNumber, formatRupiah, formatMonthKey, prevMonthKey } from '../../lib/format'
 import { toast } from '../../stores/toastStore'
@@ -75,6 +75,9 @@ const DataAdminPage = () => {
       generateNotifications(user).catch(() => {})
       await load()
     } catch (err) {
+      // Refused runs (e.g. not enough final experts, combined CR ≥ 0.1) carry a
+      // message telling the admin what to fix in Master > AHP — close the dialog.
+      if (err.code === AHP_RUN_REJECTED) setConfirmRun(false)
       toast.error(err.message || 'Gagal menjalankan AHP.')
     } finally {
       setRunning(false)

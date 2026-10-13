@@ -42,18 +42,22 @@
   </div>
   <p>
     Dokumen ini memetakan ulang struktur Firestore NoSQL Enerlyze menjadi model relasional.
-    Array yang ter-<em>embed</em> di dalam <code>ahp_results_enerlyze</code> (yaitu <code>ranking</code>
-    dan <code>criteria</code>) dinormalisasi menjadi tabel tersendiri agar memenuhi kaidah basis data
-    relasional.
+    Array yang ter-<em>embed</em> di dalam <code>ahp_results_enerlyze</code> (yaitu <code>ranking</code>,
+    <code>criteria</code>, dan <code>experts</code>) serta <code>pairs</code> pada
+    <code>ahp_judgments_enerlyze</code> dinormalisasi menjadi tabel tersendiri agar memenuhi kaidah
+    basis data relasional.
   </p>
 
   <h2><span class="no">01</span>Entity Relationship Diagram (ERD)</h2>
   <p>
-    Model Enerlyze terdiri atas enam entitas utama. <strong>USER</strong> adalah penanggung jawab
+    Model Enerlyze terdiri atas delapan entitas utama. <strong>USER</strong> adalah penanggung jawab
     banyak <strong>AREA</strong> sekaligus penginput banyak <strong>ENERGY_DATA</strong>. Tiap
     <strong>AREA</strong> memiliki banyak catatan <strong>ENERGY_DATA</strong> (satu per bulan).
+    <strong>EXPERT_JUDGMENT</strong> adalah penilaian satu narasumber (maksimal 3) yang berisi enam
+    <strong>PAIR_JUDGMENT</strong> — perbandingan berpasangan antar dua <strong>CRITERIA</strong>.
     <strong>AHP_RESULT</strong> adalah hasil analisis per bulan; satu hasil memeringkat banyak
-    <strong>AREA</strong> dan menimbang keempat <strong>CRITERIA</strong> — dua hubungan ini
+    <strong>AREA</strong>, menyimpan bobot gabungan keempat <strong>CRITERIA</strong>, dan memakai
+    penilaian 2–3 <strong>EXPERT_JUDGMENT</strong> berstatus final — ketiga hubungan ini
     bersifat <em>many-to-many</em>. <strong>NOTIFICATION</strong> ditujukan ke satu USER.
   </p>
   <pre class="plantuml">
@@ -86,7 +90,28 @@ entity "CRITERIA" as CRIT {
   --
   + code : VARCHAR(4) &lt;&lt;NN&gt;&gt;
   + name : VARCHAR(60) &lt;&lt;NN&gt;&gt;
-  + rank : INT &lt;&lt;NN&gt;&gt;
+}
+
+entity "EXPERT_JUDGMENT" as JUDG {
+  * judgment_id : VARCHAR(28) &lt;&lt;PK&gt;&gt;
+  --
+  + expert_name : VARCHAR(100) &lt;&lt;NN&gt;&gt;
+  + expert_position : VARCHAR(100) &lt;&lt;NN&gt;&gt;
+  + status : VARCHAR(5) &lt;&lt;NN&gt;&gt;
+  + lambda_max : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
+  + ci : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
+  + cr : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
+  + created_by : VARCHAR(100) &lt;&lt;NN&gt;&gt;
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "PAIR_JUDGMENT" as PAIR {
+  * judgment_id : VARCHAR(28) &lt;&lt;PK, FK&gt;&gt;
+  * criteria_a : VARCHAR(20) &lt;&lt;PK, FK&gt;&gt;
+  * criteria_b : VARCHAR(20) &lt;&lt;PK, FK&gt;&gt;
+  --
+  + value : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
 }
 
 entity "ENERGY_DATA" as DATA {
@@ -108,6 +133,7 @@ entity "AHP_RESULT" as AHP {
   * ahp_id : VARCHAR(15) &lt;&lt;PK&gt;&gt;
   --
   + period_month : CHAR(7) &lt;&lt;NN&gt;&gt;
+  weight_source : VARCHAR(20)
   + lambda_max : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
   + ci : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
   + cr : DECIMAL(8,5) &lt;&lt;NN&gt;&gt;
@@ -131,7 +157,11 @@ USER ||--o{ DATA : "menginput"
 AREA ||--o{ DATA : "memiliki"
 USER ||--o{ NOTIF : "menerima"
 AHP }o--o{ AREA : "memeringkat (ranking)"
-AHP }o--o{ CRIT : "menimbang (bobot)"
+AHP }o--o{ CRIT : "menyimpan bobot gabungan"
+JUDG ||--|{ PAIR : "berisi (6 pasangan)"
+CRIT ||--o{ PAIR : "sebagai kriteria A"
+CRIT ||--o{ PAIR : "sebagai kriteria B"
+AHP }o--o{ JUDG : "memakai penilaian (experts)"
 @enduml
   </pre>
 
@@ -154,14 +184,31 @@ AHP }o--o{ CRIT : "menimbang (bobot)"
       tiap kriteria — ikut ke tabel junction ini.</li>
     <li><strong>Many-to-Many AHP_RESULT ↔ CRITERIA:</strong> menghasilkan tabel junction baru
       <code>AHP_RESULT_CRITERIA</code> dengan primary key gabungan (<code>ahp_id</code> +
-      <code>criteria_key</code>). Atribut relasi <code>weight</code> dan <code>rank_used</code>
-      (bobot &amp; rank kriteria pada saat analisis) disimpan di tabel ini.</li>
+      <code>criteria_key</code>). Atribut relasi <code>weight</code> (bobot kriteria hasil
+      eigenvector matriks gabungan narasumber saat analisis) disimpan di tabel ini.</li>
+    <li><strong>Atribut <code>weight_source</code> pada AHP_RESULT</strong> menandai asal bobot:
+      <code>'expert_pairwise'</code> berarti bobot dihitung dari rata-rata geometrik penilaian
+      narasumber final. Hasil lama (sebelum fitur narasumber) bernilai <code>NULL</code>; bobotnya
+      dulu dibentuk dari rank kriteria, yang kini tidak lagi dipakai maupun disimpan.</li>
+    <li><strong>One-to-Many EXPERT_JUDGMENT → PAIR_JUDGMENT:</strong> foreign key
+      <code>judgment_id</code> ditempatkan pada <code>PAIR_JUDGMENT</code>, dengan primary key gabungan
+      (<code>judgment_id</code> + <code>criteria_a</code> + <code>criteria_b</code>). Dua relasi
+      <strong>CRITERIA → PAIR_JUDGMENT</strong> menghasilkan foreign key <code>criteria_a</code> dan
+      <code>criteria_b</code>. Atribut turunan <code>matrix</code> dan <code>weights</code> pada
+      Firestore tidak dijadikan kolom karena dapat dihitung ulang dari baris PAIR_JUDGMENT;
+      <code>lambda_max</code>, <code>ci</code>, <code>cr</code> tetap disimpan sebagai dasar
+      validasi status final (CR &lt; 0,1).</li>
+    <li><strong>Many-to-Many AHP_RESULT ↔ EXPERT_JUDGMENT:</strong> menghasilkan tabel junction baru
+      <code>AHP_RESULT_EXPERT</code> dengan primary key gabungan (<code>ahp_id</code> +
+      <code>judgment_id</code>). Atribut snapshot <code>expert_name</code>,
+      <code>expert_position</code>, dan <code>cr</code> ikut disimpan agar hasil tetap utuh walau
+      penilaian narasumber kemudian diubah atau dihapus.</li>
     <li><strong>Atribut multivalued <code>breakdown</code></strong> (kontribusi 4 kriteria pada skor
       tiap area) ditransformasi menjadi empat kolom eksplisit pada <code>AHP_RANKING</code>:
       <code>breakdown_energy</code>, <code>breakdown_cost</code>, <code>breakdown_duration</code>,
       <code>breakdown_maintenance</code> — karena jumlah kriteria tetap (4).</li>
   </ul>
-  <p>Hasil transformasi menghasilkan <strong>8 tabel relasional</strong>:</p>
+  <p>Hasil transformasi menghasilkan <strong>11 tabel relasional</strong>:</p>
   <pre class="plantuml">
 @startuml
 title Transformasi ERD ke LRS - Enerlyze
@@ -189,7 +236,26 @@ class CRITERIA &lt;&lt;Table&gt;&gt; {
   + PK criteria_key : VARCHAR(20)
   - code : VARCHAR(4)
   - name : VARCHAR(60)
-  - rank : INT
+}
+
+class EXPERT_JUDGMENT &lt;&lt;Table&gt;&gt; {
+  + PK judgment_id : VARCHAR(28)
+  - expert_name : VARCHAR(100)
+  - expert_position : VARCHAR(100)
+  - status : VARCHAR(5)
+  - lambda_max : DECIMAL(8,5)
+  - ci : DECIMAL(8,5)
+  - cr : DECIMAL(8,5)
+  - created_by : VARCHAR(100)
+  - created_at : TIMESTAMP
+  - updated_at : TIMESTAMP
+}
+
+class PAIR_JUDGMENT &lt;&lt;Table&gt;&gt; {
+  + PK # FK judgment_id : VARCHAR(28)
+  + PK # FK criteria_a : VARCHAR(20)
+  + PK # FK criteria_b : VARCHAR(20)
+  - value : DECIMAL(8,5)
 }
 
 class ENERGY_DATA &lt;&lt;Table&gt;&gt; {
@@ -209,6 +275,7 @@ class ENERGY_DATA &lt;&lt;Table&gt;&gt; {
 class AHP_RESULT &lt;&lt;Table&gt;&gt; {
   + PK ahp_id : VARCHAR(15)
   - period_month : CHAR(7)
+  - weight_source : VARCHAR(20)
   - lambda_max : DECIMAL(8,5)
   - ci : DECIMAL(8,5)
   - cr : DECIMAL(8,5)
@@ -231,8 +298,15 @@ class AHP_RANKING &lt;&lt;Table&gt;&gt; {
 class AHP_RESULT_CRITERIA &lt;&lt;Table&gt;&gt; {
   + PK # FK ahp_id : VARCHAR(15)
   + PK # FK criteria_key : VARCHAR(20)
-  - rank_used : INT
   - weight : DECIMAL(8,5)
+}
+
+class AHP_RESULT_EXPERT &lt;&lt;Table&gt;&gt; {
+  + PK # FK ahp_id : VARCHAR(15)
+  + PK # FK judgment_id : VARCHAR(28)
+  - expert_name : VARCHAR(100)
+  - expert_position : VARCHAR(100)
+  - cr : DECIMAL(8,5)
 }
 
 class NOTIFICATION &lt;&lt;Table&gt;&gt; {
@@ -252,8 +326,14 @@ AHP_RESULT --> AHP_RANKING : ahp_id
 AREA --> AHP_RANKING : area_id
 AHP_RESULT --> AHP_RESULT_CRITERIA : ahp_id
 CRITERIA --> AHP_RESULT_CRITERIA : criteria_key
+EXPERT_JUDGMENT --> PAIR_JUDGMENT : judgment_id
+CRITERIA --> PAIR_JUDGMENT : criteria_a
+CRITERIA --> PAIR_JUDGMENT : criteria_b
+AHP_RESULT --> AHP_RESULT_EXPERT : ahp_id
+EXPERT_JUDGMENT --> AHP_RESULT_EXPERT : judgment_id
 note bottom of AHP_RANKING : Tabel junction hasil\nM:N AHP_RESULT x AREA
 note bottom of AHP_RESULT_CRITERIA : Tabel junction hasil\nM:N AHP_RESULT x CRITERIA
+note bottom of AHP_RESULT_EXPERT : Tabel junction hasil\nM:N AHP_RESULT x EXPERT_JUDGMENT
 @enduml
   </pre>
 
@@ -287,7 +367,26 @@ class CRITERIA &lt;&lt;Table&gt;&gt; {
   + PK criteria_key : VARCHAR(20)
   code : VARCHAR(4)
   name : VARCHAR(60)
-  rank : INT
+}
+
+class EXPERT_JUDGMENT &lt;&lt;Table&gt;&gt; {
+  + PK judgment_id : VARCHAR(28)
+  expert_name : VARCHAR(100)
+  expert_position : VARCHAR(100)
+  status : VARCHAR(5)
+  lambda_max : DECIMAL(8,5)
+  ci : DECIMAL(8,5)
+  cr : DECIMAL(8,5)
+  created_by : VARCHAR(100)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+class PAIR_JUDGMENT &lt;&lt;Table&gt;&gt; {
+  + PK # FK judgment_id : VARCHAR(28)
+  + PK # FK criteria_a : VARCHAR(20)
+  + PK # FK criteria_b : VARCHAR(20)
+  value : DECIMAL(8,5)
 }
 
 class ENERGY_DATA &lt;&lt;Table&gt;&gt; {
@@ -307,6 +406,7 @@ class ENERGY_DATA &lt;&lt;Table&gt;&gt; {
 class AHP_RESULT &lt;&lt;Table&gt;&gt; {
   + PK ahp_id : VARCHAR(15)
   period_month : CHAR(7)
+  weight_source : VARCHAR(20)
   lambda_max : DECIMAL(8,5)
   ci : DECIMAL(8,5)
   cr : DECIMAL(8,5)
@@ -329,8 +429,15 @@ class AHP_RANKING &lt;&lt;Table&gt;&gt; {
 class AHP_RESULT_CRITERIA &lt;&lt;Table&gt;&gt; {
   + PK # FK ahp_id : VARCHAR(15)
   + PK # FK criteria_key : VARCHAR(20)
-  rank_used : INT
   weight : DECIMAL(8,5)
+}
+
+class AHP_RESULT_EXPERT &lt;&lt;Table&gt;&gt; {
+  + PK # FK ahp_id : VARCHAR(15)
+  + PK # FK judgment_id : VARCHAR(28)
+  expert_name : VARCHAR(100)
+  expert_position : VARCHAR(100)
+  cr : DECIMAL(8,5)
 }
 
 class NOTIFICATION &lt;&lt;Table&gt;&gt; {
@@ -350,6 +457,11 @@ AHP_RESULT "1" --> "1..*" AHP_RANKING
 AREA "1" --> "0..*" AHP_RANKING
 AHP_RESULT "1" --> "4" AHP_RESULT_CRITERIA
 CRITERIA "1" --> "0..*" AHP_RESULT_CRITERIA
+EXPERT_JUDGMENT "1" --> "6" PAIR_JUDGMENT
+CRITERIA "1" --> "0..*" PAIR_JUDGMENT : criteria_a
+CRITERIA "1" --> "0..*" PAIR_JUDGMENT : criteria_b
+AHP_RESULT "1" --> "0..3" AHP_RESULT_EXPERT
+EXPERT_JUDGMENT "1" --> "0..*" AHP_RESULT_EXPERT
 @enduml
   </pre>
 
@@ -390,7 +502,34 @@ CRITERIA "1" --> "0..*" AHP_RESULT_CRITERIA
       <tr><td>1</td><td>criteria_key</td><td>VARCHAR</td><td>20</td><td>✔</td><td>—</td><td>Not Null</td><td>—</td><td>Kunci kriteria (energy/cost/duration/maintenance).</td></tr>
       <tr><td>2</td><td>code</td><td>VARCHAR</td><td>4</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Kode singkat: KE / BL / DO / FM.</td></tr>
       <tr><td>3</td><td>name</td><td>VARCHAR</td><td>60</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Nama lengkap kriteria penilaian.</td></tr>
-      <tr><td>4</td><td>rank</td><td>INT</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Peringkat prioritas kriteria (1–4, unik).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tbl-title">Tabel: EXPERT_JUDGMENT</div>
+  <table>
+    <thead><tr><th>No</th><th>Nama Field</th><th>Tipe Data</th><th>Ukuran</th><th>PK</th><th>FK</th><th>Null</th><th>Default</th><th>Deskripsi</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>judgment_id</td><td>VARCHAR</td><td>28</td><td>✔</td><td>—</td><td>Not Null</td><td>—</td><td>Identitas unik penilaian narasumber (maksimal 3 baris).</td></tr>
+      <tr><td>2</td><td>expert_name</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Nama narasumber.</td></tr>
+      <tr><td>3</td><td>expert_position</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Jabatan narasumber.</td></tr>
+      <tr><td>4</td><td>status</td><td>VARCHAR</td><td>5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>'draft' / 'final'; final hanya bila cr &lt; 0,1.</td></tr>
+      <tr><td>5</td><td>lambda_max</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Nilai λmax matriks narasumber.</td></tr>
+      <tr><td>6</td><td>ci</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Index matriks narasumber.</td></tr>
+      <tr><td>7</td><td>cr</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Ratio matriks narasumber (RI n=4 = 0,90).</td></tr>
+      <tr><td>8</td><td>created_by</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>'Admin'</td><td>Nama (atau email) admin yang menyimpan penilaian.</td></tr>
+      <tr><td>9</td><td>created_at</td><td>TIMESTAMP</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>now()</td><td>Waktu penilaian dibuat.</td></tr>
+      <tr><td>10</td><td>updated_at</td><td>TIMESTAMP</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>now()</td><td>Waktu penilaian terakhir disimpan.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tbl-title">Tabel: PAIR_JUDGMENT</div>
+  <table>
+    <thead><tr><th>No</th><th>Nama Field</th><th>Tipe Data</th><th>Ukuran</th><th>PK</th><th>FK</th><th>Null</th><th>Default</th><th>Deskripsi</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>judgment_id</td><td>VARCHAR</td><td>28</td><td>✔</td><td>EXPERT_JUDGMENT.judgment_id</td><td>Not Null</td><td>—</td><td>Penilaian narasumber pemilik pasangan (6 pasangan per penilaian).</td></tr>
+      <tr><td>2</td><td>criteria_a</td><td>VARCHAR</td><td>20</td><td>✔</td><td>CRITERIA.criteria_key</td><td>Not Null</td><td>—</td><td>Kriteria pertama pasangan (di Firestore disimpan sebagai kode, mis. KE).</td></tr>
+      <tr><td>3</td><td>criteria_b</td><td>VARCHAR</td><td>20</td><td>✔</td><td>CRITERIA.criteria_key</td><td>Not Null</td><td>—</td><td>Kriteria kedua pasangan (urutan setelah criteria_a).</td></tr>
+      <tr><td>4</td><td>value</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>1</td><td>Nilai Saaty 1/9..9: n bila A lebih penting, 1/n bila B lebih penting.</td></tr>
     </tbody>
   </table>
 
@@ -416,14 +555,15 @@ CRITERIA "1" --> "0..*" AHP_RESULT_CRITERIA
   <table>
     <thead><tr><th>No</th><th>Nama Field</th><th>Tipe Data</th><th>Ukuran</th><th>PK</th><th>FK</th><th>Null</th><th>Default</th><th>Deskripsi</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td>ahp_id</td><td>VARCHAR</td><td>15</td><td>✔</td><td>—</td><td>Not Null</td><td>—</td><td>Kode hasil AHP, mis. "AHP-2026-04".</td></tr>
+      <tr><td>1</td><td>ahp_id</td><td>VARCHAR</td><td>15</td><td>✔</td><td>—</td><td>Not Null</td><td>—</td><td>Kode hasil AHP, mis. "AHP-2026-05".</td></tr>
       <tr><td>2</td><td>period_month</td><td>CHAR</td><td>7</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Periode analisis (YYYY-MM, unik).</td></tr>
-      <tr><td>3</td><td>lambda_max</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Nilai λmax matriks pairwise kriteria.</td></tr>
-      <tr><td>4</td><td>ci</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Index.</td></tr>
-      <tr><td>5</td><td>cr</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Ratio (valid bila &lt; 0,1).</td></tr>
-      <tr><td>6</td><td>is_consistent</td><td>BOOLEAN</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>true</td><td>Status konsistensi hasil AHP.</td></tr>
-      <tr><td>7</td><td>created_by</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>'Admin'</td><td>Nama admin penyusun analisis.</td></tr>
-      <tr><td>8</td><td>created_at</td><td>TIMESTAMP</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>now()</td><td>Waktu analisis dijalankan.</td></tr>
+      <tr><td>3</td><td>weight_source</td><td>VARCHAR</td><td>20</td><td>—</td><td>—</td><td>Null</td><td>NULL</td><td>Sumber bobot: 'expert_pairwise' (rata-rata geometrik narasumber final); NULL = hasil lama berbasis rank kriteria.</td></tr>
+      <tr><td>4</td><td>lambda_max</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Nilai λmax matriks pairwise kriteria.</td></tr>
+      <tr><td>5</td><td>ci</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Index.</td></tr>
+      <tr><td>6</td><td>cr</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Consistency Ratio (valid bila &lt; 0,1).</td></tr>
+      <tr><td>7</td><td>is_consistent</td><td>BOOLEAN</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>true</td><td>Status konsistensi hasil AHP.</td></tr>
+      <tr><td>8</td><td>created_by</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>'Admin'</td><td>Nama admin penyusun analisis.</td></tr>
+      <tr><td>9</td><td>created_at</td><td>TIMESTAMP</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>now()</td><td>Waktu analisis dijalankan.</td></tr>
     </tbody>
   </table>
 
@@ -448,8 +588,19 @@ CRITERIA "1" --> "0..*" AHP_RESULT_CRITERIA
     <tbody>
       <tr><td>1</td><td>ahp_id</td><td>VARCHAR</td><td>15</td><td>✔</td><td>AHP_RESULT.ahp_id</td><td>Not Null</td><td>—</td><td>Hasil AHP pemilik bobot.</td></tr>
       <tr><td>2</td><td>criteria_key</td><td>VARCHAR</td><td>20</td><td>✔</td><td>CRITERIA.criteria_key</td><td>Not Null</td><td>—</td><td>Kriteria yang ditimbang.</td></tr>
-      <tr><td>3</td><td>rank_used</td><td>INT</td><td>—</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Rank kriteria saat analisis dijalankan.</td></tr>
-      <tr><td>4</td><td>weight</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Bobot prioritas kriteria hasil eigenvector.</td></tr>
+      <tr><td>3</td><td>weight</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Bobot prioritas kriteria hasil eigenvector matriks gabungan narasumber.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tbl-title">Tabel: AHP_RESULT_EXPERT (junction AHP_RESULT × EXPERT_JUDGMENT)</div>
+  <table>
+    <thead><tr><th>No</th><th>Nama Field</th><th>Tipe Data</th><th>Ukuran</th><th>PK</th><th>FK</th><th>Null</th><th>Default</th><th>Deskripsi</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>ahp_id</td><td>VARCHAR</td><td>15</td><td>✔</td><td>AHP_RESULT.ahp_id</td><td>Not Null</td><td>—</td><td>Hasil AHP yang memakai penilaian narasumber.</td></tr>
+      <tr><td>2</td><td>judgment_id</td><td>VARCHAR</td><td>28</td><td>✔</td><td>EXPERT_JUDGMENT.judgment_id</td><td>Not Null</td><td>—</td><td>Penilaian narasumber final yang dipakai (2–3 per hasil).</td></tr>
+      <tr><td>3</td><td>expert_name</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Snapshot nama narasumber saat analisis.</td></tr>
+      <tr><td>4</td><td>expert_position</td><td>VARCHAR</td><td>100</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Snapshot jabatan narasumber saat analisis.</td></tr>
+      <tr><td>5</td><td>cr</td><td>DECIMAL</td><td>8,5</td><td>—</td><td>—</td><td>Not Null</td><td>—</td><td>Snapshot CR penilaian narasumber saat analisis.</td></tr>
     </tbody>
   </table>
 

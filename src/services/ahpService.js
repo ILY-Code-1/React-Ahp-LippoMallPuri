@@ -3,12 +3,16 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { COLLECTIONS } from '../constants/collections'
-import { runAHP, serializeMatrix } from '../lib/ahp'
-import { getCriteria } from './criteriaService'
+import { CRITERIA } from '../constants/criteria'
+import { runAHP, expertWeightsBlocker, toAhpResultPayload } from '../lib/ahp'
+import { getAggregatedJudgments } from './ahpJudgmentService'
 import { getAreas } from './areaService'
 import { getDataByMonth } from './dataService'
 
 const col = collection(db, COLLECTIONS.AHP_RESULTS)
+
+/** `error.code` of a refused Run AHP (the message is meant for the admin). */
+export const AHP_RUN_REJECTED = 'ahp/run-rejected'
 
 /** Human-readable AHP id, e.g. month "2026-04" → "AHP-2026-04". */
 export const ahpIdOf = (month) => `AHP-${month}`
@@ -36,33 +40,45 @@ export const getMonthCompleteness = async (month) => {
   return { areas, data, missing, complete: areas.length > 0 && missing.length === 0 }
 }
 
+/** Error for a Run AHP request that is refused (preconditions not met). */
+const rejected = (message) => Object.assign(new Error(message), { code: AHP_RUN_REJECTED })
+
 /**
  * Run AHP for `month` and persist the result (doc id = month).
  * Re-running simply overwrites the previous result.
+ *
+ * Criteria weights come from the FINAL expert judgments (Master > AHP),
+ * combined by geometric mean. Refused (error.code === AHP_RUN_REJECTED) when
+ * there are too few final experts, the combined CR ≥ 0.1, or areas lack data.
  */
 export const runAndSaveAHP = async (month, createdBy) => {
+  const aggregate = await getAggregatedJudgments()
+  const blocker = expertWeightsBlocker(aggregate)
+  if (blocker) throw rejected(blocker)
+
   const { areas, data, complete } = await getMonthCompleteness(month)
   if (!complete) {
-    throw new Error('Data belum lengkap di semua area untuk bulan ini.')
+    throw rejected('Data belum lengkap di semua area untuk bulan ini.')
   }
 
-  const criteria = await getCriteria()
   const dataByArea = {}
   for (const row of data) dataByArea[row.area_id] = row
 
-  const result = runAHP({ criteria, areas, dataByArea })
+  const result = runAHP({
+    criteria: CRITERIA,
+    criteriaMatrix: aggregate.combined.matrix,
+    areas,
+    dataByArea,
+  })
 
-  const payload = {
+  const payload = toAhpResultPayload({
     month,
-    ahp_id: ahpIdOf(month),
-    criteria: result.criteria,
-    criteria_matrix: serializeMatrix(result.criteriaMatrix),
-    criteria_weights: result.criteriaWeights,
-    consistency: result.consistency,
-    ranking: result.ranking,
-    created_by: createdBy?.name || createdBy?.email || 'Admin',
-    created_at: serverTimestamp(),
-  }
+    ahpId: ahpIdOf(month),
+    experts: aggregate.experts,
+    result,
+    createdBy: createdBy?.name || createdBy?.email || 'Admin',
+    createdAt: serverTimestamp(),
+  })
   await setDoc(doc(db, COLLECTIONS.AHP_RESULTS, month), payload)
   return payload
 }
