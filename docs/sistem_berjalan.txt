@@ -1,0 +1,44 @@
+@startuml
+' CATATAN: alur ini ASUMSI awal. Sesuaikan dengan hasil wawancara/observasi
+' di PT Puri Bintang Terang sebelum dipakai di skripsi.
+
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam roundCorner 20
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneBorderThickness 1
+skinparam swimlaneWidth same
+skinparam swimlaneTitleFontStyle bold
+
+|Staff (Penanggung Jawab Area)|
+start
+:Catat pemakaian listrik (kWh),\nbiaya, durasi operasional, dan\nmaintenance area secara manual;
+:Serahkan catatan bulanan\nke admin;
+
+|Admin|
+:Terima catatan dari\nsemua area;
+:Rekap data secara manual\n(spreadsheet);
+:Bandingkan antar area\nberdasarkan pengalaman\n(penilaian subjektif);
+if (Ada area yang\ndianggap boros?) then (Ya)
+  :Tentukan area prioritas optimasi\ntanpa pembobotan kriteria;
+  :Informasikan arahan\npenghematan secara lisan;
+else (Tidak)
+  :Informasikan tidak ada\ntindak lanjut khusus;
+endif
+
+|Staff (Penanggung Jawab Area)|
+:Terima informasi\nsecara lisan;
+:Jalankan sesuai informasi\nyang diingat;
+
+|Admin|
+:Pantau hasil pada\nbulan berikutnya;
+stop
+@enduml

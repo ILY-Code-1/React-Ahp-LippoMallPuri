@@ -1,0 +1,70 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam roundCorner 20
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityStartColor black
+skinparam ActivityEndColor black
+skinparam swimlaneBorderColor black
+skinparam swimlaneBorderThickness 1
+skinparam swimlaneWidth same
+skinparam swimlaneTitleFontStyle bold
+
+|Staff (Penanggung Jawab Area)|
+start
+:Login ke aplikasi;
+
+|Sistem Enerlyze|
+:Verifikasi akun dan tampilkan\narea yang menjadi tanggung jawab;
+
+|Staff (Penanggung Jawab Area)|
+:Input data bulanan area:\nkWh, biaya, durasi operasional,\nfrekuensi maintenance;
+
+|Sistem Enerlyze|
+:Validasi dan simpan data\n(satu data per area per bulan);
+
+|Admin|
+:Input penilaian perbandingan\nberpasangan narasumber\ndi Master AHP;
+
+|Sistem Enerlyze|
+:Hitung bobot dan CR\npenilaian narasumber;
+while (CR >= 0,1?) is (Ya)
+  :Tampilkan peringatan dan\n2 pasangan paling tidak konsisten;
+  |Admin|
+  :Revisi penilaian\nbersama narasumber;
+  |Sistem Enerlyze|
+  :Hitung ulang bobot dan CR;
+endwhile (Tidak)
+:Simpan penilaian narasumber\nberstatus final;
+
+|Admin|
+:Jalankan AHP untuk\nbulan terpilih (menu Data);
+
+|Sistem Enerlyze|
+if (Narasumber final >= 2,\nCR gabungan < 0,1, dan\ndata semua area lengkap?) then (Ya)
+  :Gabungkan penilaian narasumber\n(rata-rata geometrik);
+  :Hitung bobot kriteria\ndan CR gabungan;
+  :Hitung prioritas lokal per area\ndan skor akhir;
+  :Urutkan area dan simpan hasil;
+  :Tampilkan laporan detail\n(ranking, kontribusi kriteria,\nrekomendasi area teratas);
+else (Tidak)
+  :Tampilkan pesan penolakan\ndan arahan ke Master AHP;
+  stop
+endif
+
+|Admin|
+:Tinjau laporan dan unduh PDF\n(jika diperlukan);
+:Tentukan area prioritas\noptimasi energi;
+
+|Staff (Penanggung Jawab Area)|
+:Terima arahan dan\nlaksanakan optimasi;
+
+|Admin|
+:Pantau hasil pada\nbulan berikutnya;
+stop
+@enduml
