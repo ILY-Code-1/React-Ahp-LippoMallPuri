@@ -20,7 +20,7 @@
 import { readFileSync } from 'node:fs'
 import { initializeApp } from 'firebase/app'
 import {
-  getFirestore, collection, getDocs, addDoc, query, where, serverTimestamp,
+  getFirestore, collection, doc, getDocs, query, where, serverTimestamp, writeBatch,
 } from 'firebase/firestore'
 import { decryptConfig } from '../src/lib/crypto.js'
 import { COLLECTIONS } from '../src/constants/collections.js'
@@ -59,7 +59,8 @@ const RAW = {
     '2F': ['368992.2', '794857810', '43700', '372', '3'],
   },
   '2026-06': {
-    BS: ['2051.96', '88734498', '58900', '360', '2'],
+    // Corrected by the user (2026-10-22): was 2051.96 kWh / Rp88,734,498.
+    BS: ['37109.26', '84084768', '58900', '360', '2'],
     LG: ['426787.67', '845347794', '63400', '360', '3'],
     GF: ['525995.35', '858485084', '47600', '450', '4'],
     UG: ['192298.05', '437661660', '47700', '360', '2'],
@@ -92,6 +93,18 @@ const RAW = {
   },
 }
 const MONTHS = Object.keys(RAW)
+
+/*
+ * Deletions approved by the user (2026-10-22): the sample data created by
+ * scripts/seed-may-data.mjs. Only these exact ids are ever deleted, and only when
+ * they still look like the sample docs (checked before anything is written).
+ */
+const DELETE_JUDGMENT_IDS = ['CWFLcuVlJiCHxUOwAIdm', 'Do4oM9eiWhqS0MaNIbi1'] // "(contoh)" experts
+const DELETE_DATA_IDS = [ // data_enerlyze, month 2026-05, one per area
+  'JYerwKHJ8Wi5oHNogJS3', 'UD5PPrwHT9hK5Wl6ClqS', 'VUh60KARCITxbubUW0Dk',
+  'lwY58cgsuPrNyCDmXHD8', '4ZXGzqjVKikbLYlr29pz', 'o6di8qO5tpYvxlW2knjx',
+]
+const DELETE_DATA_MONTH = '2026-05'
 const AREA_CODES = ['BS', 'LG', 'GF', 'UG', '1F', '2F']
 const AREA_NAMES = { BS: 'Basement', LG: 'Lower Ground', GF: 'Ground Floor', UG: 'Upper Ground', '1F': 'Lantai 1', '2F': 'Lantai 2' }
 const FIELDS = ['energy', 'cost', 'energy_area_m2', 'duration', 'maintenance']
@@ -139,8 +152,8 @@ const main = async () => {
   const users = userSnap.docs.map((d) => { const { name, email, role } = d.data(); return { id: d.id, name, email, role } })
   const userById = Object.fromEntries(users.map((u) => [u.id, u]))
   const areas = areaSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const judgments = judgSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const records = dataSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  let judgments = judgSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  let records = dataSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   /* ── Area ↔ code mapping (stop on any doubt) ── */
   const problems = []
@@ -174,6 +187,41 @@ const main = async () => {
   }
 
   if (MODE === 'verify') return verify({ areaByCode, userById, records, judgments })
+
+  /* ── Deletion plan (exact ids only) + safety checks ── */
+  const delProblems = []
+  const delJudg = DELETE_JUDGMENT_IDS.map((id) => judgments.find((j) => j.id === id) || { id, missing: true })
+  const delData = DELETE_DATA_IDS.map((id) => records.find((r) => r.id === id) || { id, missing: true })
+  for (const j of delJudg) {
+    if (j.missing) delProblems.push(`narasumber ${j.id} tidak ditemukan`)
+    else if (!/\(contoh\)\s*$/.test(j.expert_name || '')) delProblems.push(`${j.id} bukan narasumber contoh ("${j.expert_name}")`)
+  }
+  for (const r of delData) {
+    if (r.missing) delProblems.push(`record ${r.id} tidak ditemukan di bulan ${MONTHS.join('/')}`)
+    else if (r.month !== DELETE_DATA_MONTH) delProblems.push(`record ${r.id} bukan bulan ${DELETE_DATA_MONTH} (${r.month})`)
+  }
+  const delAreas = delData.filter((r) => !r.missing).map((r) => r.area_id)
+  if (new Set(delAreas).size !== AREA_CODES.length || !AREA_CODES.every((c) => delAreas.includes(areaByCode[c].id))) {
+    delProblems.push('record yang akan dihapus tidak tepat satu per area')
+  }
+  const otherMay = records.filter((r) => r.month === DELETE_DATA_MONTH && !DELETE_DATA_IDS.includes(r.id))
+  if (otherMay.length) delProblems.push(`ada ${otherMay.length} record ${DELETE_DATA_MONTH} lain di luar daftar hapus: ${otherMay.map((r) => r.id).join(', ')}`)
+
+  const codeOf = (areaId) => AREA_CODES.find((c) => areaByCode[c].id === areaId) || areaId
+  console.log('\n── DIHAPUS — ahp_judgments_enerlyze')
+  for (const j of delJudg) console.log(`   ${j.id} — ${j.missing ? 'TIDAK DITEMUKAN' : `${j.expert_name} (${j.expert_position}), ${j.status}, CR=${Number(j.cr).toFixed(4)}`}`)
+  console.log(`── DIHAPUS — data_enerlyze (bulan ${DELETE_DATA_MONTH})`)
+  for (const r of delData) {
+    console.log(`   ${r.id} — ${r.missing ? 'TIDAK DITEMUKAN' : `${codeOf(r.area_id)} ${r.month}: kWh ${fmtN(r.energy)}, Rp ${fmtN(r.cost)}, luas ${fmtN(r.energy_area_m2)}, durasi ${r.duration}, FM ${r.maintenance}, oleh ${userById[r.created_by]?.name || r.created_by}`}`)
+  }
+  console.log(`── Pemeriksaan hapus: ${delProblems.length ? delProblems.join(' | ') : 'OK (tepat 2 narasumber contoh + 6 record Mei, satu per area)'}`)
+
+  // From here on, plan against the state AFTER the approved deletions.
+  const deleted = new Set([...DELETE_JUDGMENT_IDS, ...DELETE_DATA_IDS])
+  const allRecords = records
+  const allJudgments = judgments
+  records = allRecords.filter((r) => !deleted.has(r.id))
+  judgments = allJudgments.filter((j) => !deleted.has(j.id))
 
   /* ── (A) plan ── */
   const plan = []
@@ -215,7 +263,7 @@ const main = async () => {
   if (outside.length) console.log(`  (catatan: ${outside.length} record di luar Mei–Sep tidak disentuh)`)
 
   /* ── (B) plan ── */
-  console.log(`\n── (B) Narasumber — sudah ada di ahp_judgments_enerlyze: ${judgments.length} (maks ${MAX_EXPERTS})`)
+  console.log(`\n── (B) Narasumber — tersisa setelah hapus: ${judgments.length} (maks ${MAX_EXPERTS})`)
   for (const j of judgments) console.log(`   • ${j.id} — ${j.expert_name} (${j.expert_position}) — ${j.status}, CR=${Number(j.cr).toFixed(4)}`)
   const bPlan = EXPERTS.map((e) => {
     const fields = toJudgmentFields({ ...e, pairs: pairsOf(e.codes), status: 'draft' }, CRITERIA_CODES) // compute without the final gate
@@ -263,7 +311,7 @@ const main = async () => {
       console.log(`   ${m}: area terisi ${filled}/6 → ${!blocker && filled === 6 && areas.length === 6 ? 'SIAP' : 'TIDAK SIAP'}`)
     }
   }
-  readiness('kondisi saat ini', judgments, records)
+  readiness('kondisi saat ini (sebelum hapus)', allJudgments, allRecords)
   const afterJudg = bBlockers.length ? judgments : [...judgments, ...bNew.map((b) => ({ ...b.fields, status: 'final' }))]
   readiness(`setelah --write${bBlockers.length ? ' (B tidak ditulis karena pemblokir)' : ''}`, afterJudg,
     [...records, ...toCreate.map((p) => ({ area_id: p.area.id, month: p.month }))])
@@ -282,17 +330,36 @@ const main = async () => {
   }
   console.log('   ⚠ Kolom terakhir (FM) di Excel tidak berjudul — diasumsikan Frekuensi Maintenance (kali/bulan).')
 
+  /* ── Gate: exact counts approved by the user ── */
+  const EXPECT = { delJudg: 2, delData: 6, newData: 30, newJudg: 3 }
+  const counts = { delJudg: delJudg.length, delData: delData.length, newData: toCreate.length, newJudg: bNew.length }
+  const gate = [
+    ...delProblems,
+    ...bBlockers,
+    ...Object.keys(EXPECT).filter((k) => counts[k] !== EXPECT[k]).map((k) => `jumlah ${k} = ${counts[k]}, seharusnya ${EXPECT[k]}`),
+  ]
+  console.log(`\n── Rencana: hapus ${counts.delJudg} narasumber + ${counts.delData} record · tulis ${counts.newData} record + ${counts.newJudg} narasumber`)
+  console.log(`── Gerbang: ${gate.length ? `GAGAL — ${gate.join(' | ')}` : 'OK (sesuai keputusan: hapus 2 + 6, tulis 30 + 3)'}`)
+
   if (MODE !== 'write') {
     console.log('\nDRY RUN — tidak ada yang ditulis. Jalankan dengan --write setelah dikonfirmasi.')
     process.exit(0)
   }
+  if (gate.length) {
+    console.error('\n✗ --write DIBATALKAN: gerbang gagal. Tidak ada yang dihapus atau ditulis.')
+    process.exit(1)
+  }
 
-  /* ── WRITE: only missing docs, never overwrite ── */
-  console.log('\n── Menulis (A)...')
+  /* ── WRITE: one atomic batch (all deletes + all creates, or nothing) ── */
+  const admins = users.filter((u) => u.role === 'admin').sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  const createdBy = admins[0] ? admins[0].name || admins[0].email : 'Seed Script'
+  const batch = writeBatch(db)
+  for (const id of DELETE_JUDGMENT_IDS) batch.delete(doc(db, COLLECTIONS.AHP_JUDGMENTS, id))
+  for (const id of DELETE_DATA_IDS) batch.delete(doc(db, COLLECTIONS.DATA, id))
+  const created = []
   for (const p of toCreate) {
-    const dup = await getDocs(query(collection(db, COLLECTIONS.DATA), where('area_id', '==', p.area.id), where('month', '==', p.month)))
-    if (!dup.empty) { console.log(`   • [SKIP] ${p.month} ${p.code}: sudah ada (${dup.docs[0].id})`); continue }
-    const ref = await addDoc(collection(db, COLLECTIONS.DATA), {
+    const ref = doc(collection(db, COLLECTIONS.DATA))
+    batch.set(ref, {
       area_id: p.area.id,
       month: p.month,
       energy: p.vals.energy,
@@ -304,25 +371,19 @@ const main = async () => {
       created_at: serverTimestamp(),
       updated_at: serverTimestamp(),
     })
-    console.log(`   ✓ [INSERT] data_enerlyze/${ref.id} — ${p.month} ${p.code}`)
+    created.push(`data_enerlyze/${ref.id} — ${p.month} ${p.code}`)
   }
-
-  console.log('\n── Menulis (B)...')
-  if (bBlockers.length) {
-    console.log('   ✗ (B) TIDAK ditulis — selesaikan pemblokir di atas lebih dulu.')
-  } else {
-    const admins = users.filter((u) => u.role === 'admin').sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    const createdBy = admins[0] ? admins[0].name || admins[0].email : 'Seed Script'
-    for (const b of bNew) {
-      const now = await getDocs(collection(db, COLLECTIONS.AHP_JUDGMENTS))
-      if (now.size >= MAX_EXPERTS) { console.log(`   ✗ Batas ${MAX_EXPERTS} tercapai — ${b.e.expert_name} tidak ditulis.`); break }
-      const final = toJudgmentFields({ ...b.e, pairs: pairsOf(b.e.codes), status: 'final' }, CRITERIA_CODES) // enforces CR < 0.1
-      const ref = await addDoc(collection(db, COLLECTIONS.AHP_JUDGMENTS), {
-        ...final, created_by: createdBy, updated_at: serverTimestamp(), created_at: serverTimestamp(),
-      })
-      console.log(`   ✓ [INSERT] ahp_judgments_enerlyze/${ref.id} — ${final.expert_name} (created_by: ${createdBy})`)
-    }
+  for (const b of bNew) {
+    const final = toJudgmentFields({ ...b.e, pairs: pairsOf(b.e.codes), status: 'final' }, CRITERIA_CODES) // enforces CR < 0.1
+    const ref = doc(collection(db, COLLECTIONS.AHP_JUDGMENTS))
+    batch.set(ref, { ...final, created_by: createdBy, updated_at: serverTimestamp(), created_at: serverTimestamp() })
+    created.push(`ahp_judgments_enerlyze/${ref.id} — ${final.expert_name} (created_by: ${createdBy})`)
   }
+  await batch.commit()
+  console.log('\n── Batch berhasil (atomik)')
+  DELETE_JUDGMENT_IDS.forEach((id) => console.log(`   ✗ [DELETE] ahp_judgments_enerlyze/${id}`))
+  DELETE_DATA_IDS.forEach((id) => console.log(`   ✗ [DELETE] data_enerlyze/${id}`))
+  created.forEach((c) => console.log(`   ✓ [INSERT] ${c}`))
   console.log('\n✓ Selesai. AHP TIDAK dijalankan; ahp_results_enerlyze tidak disentuh.')
   process.exit(0)
 }
