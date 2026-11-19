@@ -29,3 +29,8 @@ dist-ssr
 *.sw?
 
 firebase-config.json
+
+# Firestore migration data and private service-account keys
+firestore-backup*.json
+service-account*.json
+*-service-account*.json

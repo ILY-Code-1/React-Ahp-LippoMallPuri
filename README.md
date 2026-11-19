@@ -52,6 +52,9 @@ npm run encrypt-env -- firebase-config.json
 
 Detail lengkap ada di **[SETUP.md](./SETUP.md)**.
 
+Panduan backup dan migrasi data Firestore ke project/akun Firebase lain ada di
+**[README_FIREBASE_MIGRATION.md](./README_FIREBASE_MIGRATION.md)**.
+
 ---
 
 ## 👥 Fitur per Role

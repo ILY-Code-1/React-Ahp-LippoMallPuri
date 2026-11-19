@@ -15,11 +15,14 @@
     "encrypt-env": "node scripts/encrypt-env.mjs",
     "seed": "node scripts/seed.mjs",
     "seed:dummy": "node scripts/seed-dummy-data.mjs",
-    "ahp": "node scripts/run-ahp.mjs"
+    "ahp": "node scripts/run-ahp.mjs",
+    "firestore:backup": "node scripts/firestore-migrate.mjs backup",
+    "firestore:restore": "node scripts/firestore-migrate.mjs restore"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",
     "firebase": "^12.13.0",
+    "firebase-admin": "^14.5.1",
     "html2canvas": "^1.4.1",
     "js-cookie": "^3.0.7",
     "jspdf": "^4.2.1",
